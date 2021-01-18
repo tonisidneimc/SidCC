@@ -4,12 +4,12 @@ function assert {
   expected=$1
   input=$2
   
-  python3 main.py $input > tmp.S
+  python3 main.py "$input" > tmp.S
   gcc -o tmp tmp.S
   ./tmp
   actual=$?
 
-  if [ $actual = $expected ]; then
+  if [ "$actual" = "$expected" ]; then
     echo "$input => $actual"
   else
     echo "$input => expected $expected, got $actual"
@@ -19,5 +19,7 @@ function assert {
 
 assert 0 0 
 assert 42 42
+assert 21 '5+20-4'
+assert 41 ' 12 + 34 - 5 '
 
 echo OK
