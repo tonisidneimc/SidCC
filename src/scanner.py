@@ -1,6 +1,6 @@
-from .Token import *
-from .TokenType import *
-from .Errors import ScanError, error_collector
+from .token import *
+from .token_type import *
+from .errors import ScanError, error_collector
 
 __all__ = ["Scanner"]
 
@@ -9,34 +9,42 @@ class Scanner(object) :
   def __init__(self, source : str) :
     self._start = 0         # works as a pointer to the beginning of a token 
     self._current = 0       # works as a pointer to the end of a token
-    self._source = source   # character buffer to be tokenized
-    self._tokens = []       
+    self._source = source   # character buffer to be tokenized       
     self._line = 1
 	
     # punctuators characters
     self.punct = {
-      "-"  : (lambda : self._addToken(TokenType.MINUS)),
-      "+"  : (lambda : self._addToken(TokenType.PLUS))
+      '('  : (lambda : self._make_token(TokenType.LEFT_PAREN)),
+      ')'  : (lambda : self._make_token(TokenType.RIGHT_PAREN)),
+      '-'  : (lambda : self._make_token(TokenType.MINUS)),
+      '+'  : (lambda : self._make_token(TokenType.PLUS)),
+      '*'  : (lambda : self._make_token(TokenType.STAR)),
+      '/'  : (lambda : self._make_token(TokenType.SLASH))
     }
     
   def tokenize(self) -> list:	
-		
+    
+    tk_list = []
+    	
     while not self._eof() :                
       try :			
-        self._scanToken()
-        
+        token = self._scan_token()
       except ScanError as err :
-        error_collector.add(err)		
-
+        error_collector.add(err)	
+      else :
+        tk_list.append(token)
+    
     self._start = self._current     
-    self._addToken(TokenType.EOF)
+    tk_list.append(self._make_token(TokenType.EOF))
         
-    return self._tokens
+    return tk_list
         
-  def _scanToken(self) -> None:
-    self._skipws() 
+  def _scan_token(self) -> Token:
+    self._skipws()
+    
+    if self._eof() : 
+      return self._make_token(TokenType.EOF)
 
-    if self._eof() : return
     self._start = self._current
         
     c = self._advance()
@@ -48,27 +56,26 @@ class Scanner(object) :
       return self._number()
         
     else : 
-      raise ScanError(f"Unexpected character '{c}'", 
-        self._line, self._current, self._source)
+      raise ScanError(f"Unexpected character '{c}'", self._line, self._current-1)
             
-  def _addToken(self, kind : TokenType, literal : object = None) -> None :
+  def _make_token(self, kind : TokenType, literal : object = None) -> Token :
     # creates a token, with lexeme at _source from _start until _current - 1
 
     lexeme = self._source[self._start : self._current]
-    self._tokens.append(Token(kind, lexeme, literal, self._line, self._start))
+    return Token(kind, lexeme, literal, self._line, self._start)
             
   def _number(self) -> None :
     while str.isdigit(self._peek()) :
       self._advance()
       	
-    self._addToken(TokenType.NUM, int(self._source[self._start : self._current]))
+    return self._make_token(TokenType.NUM, int(self._source[self._start : self._current]))
 		
   def _eof(self) -> bool :
     # checks if there is any character still to be processed from the buffer
     return self._current >= len(self._source)
     
   def _advance(self, offset : int = 1) -> str :    
-    if self._eof() : return ""
+    if self._eof() : return ''
         
     self._current += offset
     return self._source[self._current - offset]
@@ -85,7 +92,7 @@ class Scanner(object) :
     while not self._eof() :
       c = self._peek()
             
-      if c not in {" ", "\n", "\r", "\t"} : 
+      if c not in {' ', '\n', '\r', '\t'} : 
         break
         		
       self._advance()
