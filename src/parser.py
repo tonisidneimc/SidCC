@@ -38,15 +38,28 @@ class Parser :
 
   def _multiplication(self) -> Expr:
 
-    left = self._primary()
+    left = self._unary()
         
     while self._consume(TokenType.SLASH, TokenType.STAR) :
       operator = self._previous()
-      right = self._primary()
+      right = self._unary()
      
       left = Binary(left, operator, right)
 
     return left
+
+  def _unary(self) -> Expr :
+    
+    if self._consume(TokenType.PLUS) :
+      return self._unary()
+
+    if self._consume(TokenType.MINUS) :
+      operator = self._previous()
+      left = self._unary()      
+
+      return Unary(left, operator)
+
+    return self._primary()
 
   def _primary(self) -> Expr:
     

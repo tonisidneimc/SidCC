@@ -29,7 +29,15 @@ class Asm_Generator :
     if isinstance(node, Literal):
       print("\t\tpushq $%d" %(node.value))
       return
-    
+
+    if isinstance(node, Unary):
+      if node.op.kind == TokenType.MINUS :
+        self._gen_asm(node.lhs)
+        print("\t\tpopq %rax")
+        print("\t\tnegq %rax")
+        print("\t\tpushq %rax") 
+        return    
+
     self._gen_asm(node.lhs)
     self._gen_asm(node.rhs)
 

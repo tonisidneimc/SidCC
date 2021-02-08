@@ -12,4 +12,9 @@ class Binary (Expr) :
     self.op = operator
     self.rhs = rhs
 
+class Unary (Expr) :
+  def __init__(self, lhs : Expr, operator : Token) :
+    self.lhs = lhs
+    self.op = operator
+
 
