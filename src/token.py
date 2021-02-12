@@ -9,6 +9,14 @@ _debug = {
   TokenType.MINUS : "MINUS",
   TokenType.SLASH : "SLASH",
   TokenType.STAR : "STAR",
+  TokenType.EQUAL : "EQUAL",
+  TokenType.BANG : "BANG",
+  TokenType.LESS : "LESS",
+  TokenType.GREATER : "GREATER",
+  TokenType.EQUAL_EQUAL : "EQUAL_EQUAL",
+  TokenType.BANG_EQUAL : "BANG_EQUAL",
+  TokenType.LESS_EQUAL : "LESS_EQUAL",
+  TokenType.GREATER_EQUAL : "GREATER_EQUAL",
   TokenType.NUM : "NUM",
   TokenType.EOF : "EOF"
 }

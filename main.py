@@ -17,9 +17,9 @@ if __name__ == "__main__" :
 
   tk_list = Scanner(user_input).tokenize()
 
-  #for token in tk_list :
+  # for token in tk_list :
   #  print(token)
-	
+ 
   error_collector.show()	
   if not error_collector.ok() :
     sys.exit(1)

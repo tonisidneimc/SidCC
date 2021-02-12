@@ -19,7 +19,11 @@ class Scanner(object) :
       '-'  : (lambda : self._make_token(TokenType.MINUS)),
       '+'  : (lambda : self._make_token(TokenType.PLUS)),
       '*'  : (lambda : self._make_token(TokenType.STAR)),
-      '/'  : (lambda : self._make_token(TokenType.SLASH))
+      '/'  : (lambda : self._make_token(TokenType.SLASH)),
+      '!'  : (lambda : self._make_token(TokenType.BANG_EQUAL if self._match("=") else TokenType.BANG)),
+      '='  : (lambda : self._make_token(TokenType.EQUAL_EQUAL if self._match('=') else TokenType.EQUAL)),
+      '>'  : (lambda : self._make_token(TokenType.GREATER_EQUAL if self._match('=') else TokenType.GREATER)),
+      '<'  : (lambda : self._make_token(TokenType.LESS_EQUAL if self._match('=') else TokenType.LESS))
     }
     
   def tokenize(self) -> list:	
@@ -65,16 +69,25 @@ class Scanner(object) :
     return Token(kind, lexeme, literal, self._line, self._start)
             
   def _number(self) -> None :
+
     while str.isdigit(self._peek()) :
-      self._advance()
+      self._current += 1
       	
     return self._make_token(TokenType.NUM, int(self._source[self._start : self._current]))
 		
   def _eof(self) -> bool :
     # checks if there is any character still to be processed from the buffer
     return self._current >= len(self._source)
-    
+
+  def _match(self, expected : str) -> bool :
+
+    if self._peek() != expected : return False
+
+    self._current += 1
+    return True
+  
   def _advance(self, offset : int = 1) -> str :    
+    
     if self._eof() : return ''
         
     self._current += offset
@@ -82,10 +95,9 @@ class Scanner(object) :
     
   def _peek(self) -> str:
     # get the current character in the buffer
-        
-    if self._eof() : return "\0"
-    else : 
-      return self._source[self._current]
+    if self._eof() : return '\0'
+    
+    return self._source[self._current]
         
   def _skipws(self) -> None :
     	
@@ -95,5 +107,5 @@ class Scanner(object) :
       if c not in {' ', '\n', '\r', '\t'} : 
         break
         		
-      self._advance()
+      self._current += 1
 

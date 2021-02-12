@@ -17,4 +17,8 @@ class Unary (Expr) :
     self.lhs = lhs
     self.op = operator
 
+class Relational (Binary) :
+  def __init__(self, lhs : Expr, operator : Token, rhs : Expr) :
+    super().__init__(lhs, operator, rhs)
+
 

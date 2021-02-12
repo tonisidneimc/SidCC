@@ -23,8 +23,43 @@ class Parser :
         statements.append(stmt)
 
     return statements
-
+  
   def _expression(self) -> Expr:
+    
+    return self._equality()
+
+  def _equality(self) -> Expr:
+
+    left = self._comparison()
+
+    while self._consume(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL) :
+      operator = self._previous()
+      right = self._comparison()
+
+      left = Relational(left, operator, right)
+
+    return left
+  
+  def _comparison(self) -> Expr:
+
+    left = self._addition()
+
+    while self._consume(TokenType.LESS, TokenType.LESS_EQUAL, 
+                        TokenType.GREATER, TokenType.GREATER_EQUAL) :
+      
+      operator = self._previous()
+
+      right = self._addition()
+
+      if operator.kind in {TokenType.GREATER, TokenType.GREATER_EQUAL} :
+        # don't need to support > and >= Assembly instructions, so A >= B will be translated to B <= A
+        left = Relational(right, operator, left)  
+      else:
+        left = Relational(left, operator, right)
+
+    return left
+
+  def _addition(self) -> Expr:
     
     left = self._multiplication()
     
