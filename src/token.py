@@ -17,6 +17,7 @@ _debug = {
   TokenType.BANG_EQUAL : "BANG_EQUAL",
   TokenType.LESS_EQUAL : "LESS_EQUAL",
   TokenType.GREATER_EQUAL : "GREATER_EQUAL",
+  TokenType.IDENTIFIER : "IDENTIFIER",
   TokenType.NUM : "NUM",
   TokenType.EOF : "EOF"
 }

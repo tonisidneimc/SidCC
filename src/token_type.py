@@ -1,6 +1,8 @@
 __all__ = ["TokenType"]
 
 class TokenType :
+  SEMICOLON, \
+  \
   LEFT_PAREN, RIGHT_PAREN, \
   \
   PLUS, MINUS, SLASH, STAR, \
@@ -8,8 +10,8 @@ class TokenType :
   BANG, BANG_EQUAL, EQUAL, EQUAL_EQUAL, \
   GREATER, GREATER_EQUAL, LESS, LESS_EQUAL, \
   \
-  NUM, \
+  IDENTIFIER, NUM, \
   \
-  EOF =  range(16)
+  EOF =  range(18)
 
 

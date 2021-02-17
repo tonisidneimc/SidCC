@@ -19,18 +19,18 @@ if __name__ == "__main__" :
 
   # for token in tk_list :
   #  print(token)
- 
+  
   error_collector.show()	
   if not error_collector.ok() :
     sys.exit(1)
 
-  ast = Parser(tk_list).parse()
+  stmts = Parser(tk_list).parse()
 
   error_collector.show()	
   if not error_collector.ok() :
     sys.exit(1)
 
-  Asm_Generator(ast).gen()
+  Asm_Generator(stmts).gen()
 	
 
 

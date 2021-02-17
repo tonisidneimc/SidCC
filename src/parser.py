@@ -2,6 +2,7 @@
 from .token import *
 from .token_type import *
 from .expr import *
+from .stmt import *
 from .errors import ParseError, error_collector
 
 class Parser :
@@ -15,18 +16,45 @@ class Parser :
     
     while not self._is_at_end() :
       try:
-        stmt = self._expression()
+        stmt = self._statement()
 
       except ParseError as err :
-        error_collector.add(err); break
+        error_collector.add(err)
+        self._syncronize(); continue
       else:
         statements.append(stmt)
 
     return statements
-  
+
+  def _statement(self) -> Stmt:
+
+    return self._exprStmt()
+
+  def _exprStmt(self) -> Stmt:
+
+    expr = self._expression()
+    self._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
+    
+    return Expression(expr) 
+
   def _expression(self) -> Expr:
     
-    return self._equality()
+    return self._assignment()
+
+  def _assignment(self) -> Expr:
+    
+    expr = self._equality()
+
+    if self._consume(TokenType.EQUAL) :
+      equals = self._previous()
+      
+      if not isinstance(expr, Variable) :
+        raise ParseError(equals, "not an lvalue")
+
+      value = self._assignment()
+      expr = Assign(expr, value)
+
+    return expr
 
   def _equality(self) -> Expr:
 
@@ -101,14 +129,17 @@ class Parser :
     if self._consume(TokenType.NUM) :
       return Literal(self._previous().literal)
 
+    elif self._consume(TokenType.IDENTIFIER) :
+      return Variable(self._previous().lexeme)
+
     elif self._consume(TokenType.LEFT_PAREN) :
       left = self._expression()
-      self._expect(TokenType.RIGHT_PAREN, err_msg = "Expect ')' after expression")
+      self._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after expression")
       
       return left
 
     else :
-      raise ParseError(self._peek(), "Expect expression")
+      raise ParseError(self._peek(), "invalid expression")
 
   
   def _is_at_end(self) -> bool:   
@@ -143,4 +174,19 @@ class Parser :
     else:
       raise ParseError(self._peek(), err_msg)
     
+  def _syncronize(self) -> None :
+  
+    begin_statement = {}
+    end_statement = {TokenType.SEMICOLON}
+
+    while not self._is_at_end() :
+
+      if self._previous().kind in end_statement :
+        return
+      elif self._peek().kind in begin_statement :
+        return
+      else : 
+        self._advance()
+
+
 

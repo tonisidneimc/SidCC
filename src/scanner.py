@@ -16,6 +16,7 @@ class Scanner(object) :
     self.punct = {
       '('  : (lambda : self._make_token(TokenType.LEFT_PAREN)),
       ')'  : (lambda : self._make_token(TokenType.RIGHT_PAREN)),
+      ';'  : (lambda : self._make_token(TokenType.SEMICOLON)),
       '-'  : (lambda : self._make_token(TokenType.MINUS)),
       '+'  : (lambda : self._make_token(TokenType.PLUS)),
       '*'  : (lambda : self._make_token(TokenType.STAR)),
@@ -58,9 +59,12 @@ class Scanner(object) :
         
     elif str.isdigit(c) : 
       return self._number()
-        
+
+    elif 'a' <= c <= 'z':
+      return self._identifier() 
+    
     else : 
-      raise ScanError(f"Unexpected character '{c}'", self._line, self._current-1)
+      raise ScanError(f"unexpected character '{c}'", self._line, self._current - 1)
             
   def _make_token(self, kind : TokenType, literal : object = None) -> Token :
     # creates a token, with lexeme at _source from _start until _current - 1
@@ -68,13 +72,18 @@ class Scanner(object) :
     lexeme = self._source[self._start : self._current]
     return Token(kind, lexeme, literal, self._line, self._start)
             
-  def _number(self) -> None :
+  def _number(self) -> Token :
 
     while str.isdigit(self._peek()) :
       self._current += 1
       	
     return self._make_token(TokenType.NUM, int(self._source[self._start : self._current]))
-		
+  
+  def _identifier(self) -> Token :
+    text = self._source[self._start : self._current]
+ 
+    return self._make_token(TokenType.IDENTIFIER, text)
+	
   def _eof(self) -> bool :
     # checks if there is any character still to be processed from the buffer
     return self._current >= len(self._source)
