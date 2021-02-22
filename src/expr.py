@@ -22,8 +22,9 @@ class Literal (Expr) :
     self.value = value
 
 class Variable (Expr) :
-  def __init__(self, name : str) :
+  def __init__(self, name : str, var_desc : object) :
     self.name = name
+    self.desc = var_desc
 
 class Assign (Expr) :
   def __init__(self, expr : Expr, value : Expr) :

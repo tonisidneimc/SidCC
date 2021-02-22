@@ -6,10 +6,10 @@ __all__ = ["Scanner"]
 
 class Scanner(object) :
     
-  def __init__(self, source : str) :
+  def __init__(self) :
     self._start = 0         # works as a pointer to the beginning of a token 
     self._current = 0       # works as a pointer to the end of a token
-    self._source = source   # character buffer to be tokenized       
+    self._source = ""       # character buffer to be tokenized       
     self._line = 1
 	
     # punctuators characters
@@ -27,8 +27,10 @@ class Scanner(object) :
       '<'  : (lambda : self._make_token(TokenType.LESS_EQUAL if self._match('=') else TokenType.LESS))
     }
     
-  def tokenize(self) -> list:	
+  def tokenize(self, source : str) -> list:	
     
+    self._source = source
+
     tk_list = []
     	
     while not self._eof() :                
@@ -60,7 +62,7 @@ class Scanner(object) :
     elif str.isdigit(c) : 
       return self._number()
 
-    elif 'a' <= c <= 'z':
+    elif self._is_ident(c):
       return self._identifier() 
     
     else : 
@@ -78,11 +80,19 @@ class Scanner(object) :
       self._current += 1
       	
     return self._make_token(TokenType.NUM, int(self._source[self._start : self._current]))
-  
+
+  def _is_ident(self, c : str) -> bool:
+
+    return str.isalnum(c) or c == '_'  
+
   def _identifier(self) -> Token :
-    text = self._source[self._start : self._current]
+
+    while self._is_ident(self._peek()) :
+      self._current += 1
+
+    lexeme = self._source[self._start : self._current]
  
-    return self._make_token(TokenType.IDENTIFIER, text)
+    return self._make_token(TokenType.IDENTIFIER, lexeme)
 	
   def _eof(self) -> bool :
     # checks if there is any character still to be processed from the buffer

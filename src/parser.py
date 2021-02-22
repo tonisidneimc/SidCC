@@ -5,15 +5,24 @@ from .expr import *
 from .stmt import *
 from .errors import ParseError, error_collector
 
+class Obj : # for Variable description
+  def __init__(self, offset : int = 0) :
+    self.offset = offset
+
 class Parser :
   
-  def __init__(self, tokens : list) :
+  def __init__(self) :
     self._current = 0
+    self._tokens = []
+    self._lvars = {}
+    self._offset = 0 
+
+  def parse(self, tokens : list) -> Function :
+
     self._tokens = tokens    
 
-  def parse(self) -> list :
-    statements = []
-    
+    statements = [] # function's body
+
     while not self._is_at_end() :
       try:
         stmt = self._statement()
@@ -22,16 +31,21 @@ class Parser :
         error_collector.add(err)
         self._syncronize(); continue
       else:
-        statements.append(stmt)
+        # it only appends if no errors occurred during parsing
+        # it's a valid statement
+        statements.append(stmt) 
 
-    return statements
+    return Function(self._lvars, body = statements, stack_size = self._offset)
 
   def _statement(self) -> Stmt:
-
+    # statement -> exprStmt
     return self._exprStmt()
 
   def _exprStmt(self) -> Stmt:
-
+    """
+       matches the rule :
+         exprStmt -> expression ";"
+    """
     expr = self._expression()
     self._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
     
@@ -39,10 +53,18 @@ class Parser :
 
   def _expression(self) -> Expr:
     
+    """
+       matches the rule: 
+         expression -> assignment
+    """
     return self._assignment()
 
   def _assignment(self) -> Expr:
     
+    """ 
+       matches the rule: 
+         assignment -> equality ("=" assignment)?
+    """
     expr = self._equality()
 
     if self._consume(TokenType.EQUAL) :
@@ -57,6 +79,12 @@ class Parser :
     return expr
 
   def _equality(self) -> Expr:
+    
+    """
+       matches to one of the rules: 
+         equality -> comparison ("==" comparison)*
+         equality -> comparison ("!=" comparison)*
+    """
 
     left = self._comparison()
 
@@ -69,6 +97,14 @@ class Parser :
     return left
   
   def _comparison(self) -> Expr:
+
+    """
+       matches to one of the rules: 
+         comparison -> addition ( "<" addition)*
+         comparison -> addition ("<=" addition)*
+         comparison -> addition ( ">" addition)*
+         comparison -> addition (">=" addition)*
+    """    
 
     left = self._addition()
 
@@ -89,6 +125,12 @@ class Parser :
 
   def _addition(self) -> Expr:
     
+    """
+       matches to one of the rules: 
+         addition -> multiplication ("+" multiplication)*
+         addition -> multiplication ("-" multiplication)*
+    """    
+
     left = self._multiplication()
     
     while self._consume(TokenType.PLUS, TokenType.MINUS) :
@@ -100,6 +142,12 @@ class Parser :
     return left
 
   def _multiplication(self) -> Expr:
+    
+    """
+       matches to one of the rules: 
+         multiplication -> unary ("*" unary)*
+         multiplication -> unary ("/" unary)*
+    """
 
     left = self._unary()
         
@@ -113,6 +161,12 @@ class Parser :
 
   def _unary(self) -> Expr :
     
+    """
+       matches to one of the rules:
+         unary -> ("+" | "-")? unary
+         unary -> primary    
+    """
+
     if self._consume(TokenType.PLUS) :
       return self._unary()
 
@@ -126,13 +180,28 @@ class Parser :
 
   def _primary(self) -> Expr:
     
+    """
+       matches to one of the rules:
+         primary -> NUMBER
+         primary -> IDENTIFIER
+         primary -> "(" expression ")"
+    """
+
     if self._consume(TokenType.NUM) :
       return Literal(self._previous().literal)
 
     elif self._consume(TokenType.IDENTIFIER) :
-      return Variable(self._previous().lexeme)
+      
+      var_name = self._previous().lexeme
+
+      if not var_name in self._lvars :
+        self._offset += 8
+        self._lvars[var_name] = Obj(-self._offset)
+
+      return Variable(var_name, var_desc = self._lvars[var_name])
 
     elif self._consume(TokenType.LEFT_PAREN) :
+      
       left = self._expression()
       self._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after expression")
       
@@ -151,9 +220,10 @@ class Parser :
 
   def _consume(self, *args : tuple) -> bool:
     
-    for token in args:
-      if self._match(token):
-        self._advance(); return True       
+    for token in args :
+      if self._match(token) :
+        self._current += 1 
+        return True      
     
     return False
 
@@ -181,12 +251,8 @@ class Parser :
 
     while not self._is_at_end() :
 
-      if self._previous().kind in end_statement :
-        return
-      elif self._peek().kind in begin_statement :
-        return
-      else : 
-        self._advance()
-
+      if self._previous().kind in end_statement : return
+      elif self._peek().kind in begin_statement : return
+      else : self._current += 1
 
 

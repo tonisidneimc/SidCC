@@ -15,7 +15,7 @@ if __name__ == "__main__" :
   
   error_collector.set_source(user_input)
 
-  tk_list = Scanner(user_input).tokenize()
+  tk_list = Scanner().tokenize(user_input)
 
   # for token in tk_list :
   #  print(token)
@@ -24,13 +24,13 @@ if __name__ == "__main__" :
   if not error_collector.ok() :
     sys.exit(1)
 
-  stmts = Parser(tk_list).parse()
+  prog = Parser().parse(tk_list)
 
   error_collector.show()	
   if not error_collector.ok() :
     sys.exit(1)
 
-  Asm_Generator(stmts).gen()
+  Asm_Generator().gen(prog)
 	
 
 

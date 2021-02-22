@@ -3,6 +3,7 @@ from .token_type import *
 __all__ = ["Token"]
 
 _debug = {
+  TokenType.SEMICOLON : "SEMICOLON",
   TokenType.LEFT_PAREN : "LEFT_PAREN", 
   TokenType.RIGHT_PAREN : "RIGHT_PAREN", 
   TokenType.PLUS : "PLUS",
