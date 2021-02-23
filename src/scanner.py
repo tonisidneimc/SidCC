@@ -4,127 +4,137 @@ from .errors import ScanError, error_collector
 
 __all__ = ["Scanner"]
 
-class Scanner(object) :
+class Scanner(object) :    
+
+  _start = 0         # works as a pointer to the beginning of a token 
+  _current = 0       # works as a pointer to the end of a token
+  _source = ""       # character buffer to be tokenized       
+  _line = 1
+
+  # punctuators characters
+  _punct = {
+    '('  : (lambda : Scanner._make_token(TokenType.LEFT_PAREN)),
+    ')'  : (lambda : Scanner._make_token(TokenType.RIGHT_PAREN)),
+    ';'  : (lambda : Scanner._make_token(TokenType.SEMICOLON)),
+    '-'  : (lambda : Scanner._make_token(TokenType.MINUS)),
+    '+'  : (lambda : Scanner._make_token(TokenType.PLUS)),
+    '*'  : (lambda : Scanner._make_token(TokenType.STAR)),
+    '/'  : (lambda : Scanner._make_token(TokenType.SLASH)),
+    '!'  : (lambda : Scanner._make_token(TokenType.BANG_EQUAL if Scanner._match("=") else TokenType.BANG)),
+    '='  : (lambda : Scanner._make_token(TokenType.EQUAL_EQUAL if Scanner._match('=') else TokenType.EQUAL)),
+    '>'  : (lambda : Scanner._make_token(TokenType.GREATER_EQUAL if Scanner._match('=') else TokenType.GREATER)),
+    '<'  : (lambda : Scanner._make_token(TokenType.LESS_EQUAL if Scanner._match('=') else TokenType.LESS))
+  }
+
+  @classmethod
+  def tokenize(cls, source : str) -> list:	
     
-  def __init__(self) :
-    self._start = 0         # works as a pointer to the beginning of a token 
-    self._current = 0       # works as a pointer to the end of a token
-    self._source = ""       # character buffer to be tokenized       
-    self._line = 1
-	
-    # punctuators characters
-    self.punct = {
-      '('  : (lambda : self._make_token(TokenType.LEFT_PAREN)),
-      ')'  : (lambda : self._make_token(TokenType.RIGHT_PAREN)),
-      ';'  : (lambda : self._make_token(TokenType.SEMICOLON)),
-      '-'  : (lambda : self._make_token(TokenType.MINUS)),
-      '+'  : (lambda : self._make_token(TokenType.PLUS)),
-      '*'  : (lambda : self._make_token(TokenType.STAR)),
-      '/'  : (lambda : self._make_token(TokenType.SLASH)),
-      '!'  : (lambda : self._make_token(TokenType.BANG_EQUAL if self._match("=") else TokenType.BANG)),
-      '='  : (lambda : self._make_token(TokenType.EQUAL_EQUAL if self._match('=') else TokenType.EQUAL)),
-      '>'  : (lambda : self._make_token(TokenType.GREATER_EQUAL if self._match('=') else TokenType.GREATER)),
-      '<'  : (lambda : self._make_token(TokenType.LESS_EQUAL if self._match('=') else TokenType.LESS))
-    }
-    
-  def tokenize(self, source : str) -> list:	
-    
-    self._source = source
+    cls._source = source
 
     tk_list = []
     	
-    while not self._eof() :                
+    while not cls._eof() :                
       try :			
-        token = self._scan_token()
+        token = cls._scan_token()
       except ScanError as err :
         error_collector.add(err)	
       else :
         tk_list.append(token)
     
-    self._start = self._current     
-    tk_list.append(self._make_token(TokenType.EOF))
+    cls._start = cls._current     
+    tk_list.append(cls._make_token(TokenType.EOF))
         
-    return tk_list
-        
-  def _scan_token(self) -> Token:
-    self._skipws()
+    return tk_list  
+      
+  @classmethod
+  def _scan_token(cls) -> Token:
+    cls._skipws()
     
-    if self._eof() : 
-      return self._make_token(TokenType.EOF)
+    if cls._eof() : 
+      return cls._make_token(TokenType.EOF)
 
-    self._start = self._current
+    cls._start = cls._current
         
-    c = self._advance()
+    c = cls._advance()
     
-    if c in self.punct :
-      return self.punct[c]()
+    if c in cls._punct :
+      return cls._punct[c]()
         
     elif str.isdigit(c) : 
-      return self._number()
+      return cls._number()
 
-    elif self._is_ident(c):
-      return self._identifier() 
+    elif cls._is_ident(c):
+      return cls._identifier() 
     
     else : 
-      raise ScanError(f"unexpected character '{c}'", self._line, self._current - 1)
+      raise ScanError(f"unexpected character '{c}'", cls._line, cls._current - 1)
             
-  def _make_token(self, kind : TokenType, literal : object = None) -> Token :
+  @classmethod
+  def _make_token(cls, kind : TokenType, literal : object = None) -> Token :
     # creates a token, with lexeme at _source from _start until _current - 1
 
-    lexeme = self._source[self._start : self._current]
-    return Token(kind, lexeme, literal, self._line, self._start)
-            
-  def _number(self) -> Token :
+    lexeme = cls._source[cls._start : cls._current]
+    return Token(kind, lexeme, literal, cls._line, cls._start)
+  
+  @classmethod          
+  def _number(cls) -> Token :
 
-    while str.isdigit(self._peek()) :
-      self._current += 1
+    while str.isdigit(cls._peek()) :
+      cls._current += 1
       	
-    return self._make_token(TokenType.NUM, int(self._source[self._start : self._current]))
+    return cls._make_token(TokenType.NUM, int(cls._source[cls._start : cls._current]))
 
-  def _is_ident(self, c : str) -> bool:
+  @staticmethod
+  def _is_ident(c : str) -> bool:
 
     return str.isalnum(c) or c == '_'  
 
-  def _identifier(self) -> Token :
+  @classmethod
+  def _identifier(cls) -> Token :
 
-    while self._is_ident(self._peek()) :
-      self._current += 1
+    while cls._is_ident(cls._peek()) :
+      cls._current += 1
 
-    lexeme = self._source[self._start : self._current]
+    lexeme = cls._source[cls._start : cls._current]
  
-    return self._make_token(TokenType.IDENTIFIER, lexeme)
-	
-  def _eof(self) -> bool :
+    return cls._make_token(TokenType.IDENTIFIER, lexeme)
+    
+  @classmethod
+  def _eof(cls) -> bool :
     # checks if there is any character still to be processed from the buffer
-    return self._current >= len(self._source)
+    return cls._current >= len(cls._source)
 
-  def _match(self, expected : str) -> bool :
+  @classmethod
+  def _match(cls, expected : str) -> bool :
 
-    if self._peek() != expected : return False
+    if cls._peek() != expected : return False
 
-    self._current += 1
+    cls._current += 1
     return True
   
-  def _advance(self, offset : int = 1) -> str :    
+  @classmethod
+  def _advance(cls, offset : int = 1) -> str :    
     
-    if self._eof() : return ''
+    if cls._eof() : return ''
         
-    self._current += offset
-    return self._source[self._current - offset]
+    cls._current += offset
+    return cls._source[cls._current - offset]
     
-  def _peek(self) -> str:
+  @classmethod
+  def _peek(cls) -> str:
     # get the current character in the buffer
-    if self._eof() : return '\0'
+    if cls._eof() : return '\0'
     
-    return self._source[self._current]
-        
-  def _skipws(self) -> None :
+    return cls._source[cls._current]
+
+  @classmethod        
+  def _skipws(cls) -> None :
     	
-    while not self._eof() :
-      c = self._peek()
+    while not cls._eof() :
+      c = cls._peek()
             
       if c not in {' ', '\n', '\r', '\t'} : 
         break
         		
-      self._current += 1
+      cls._current += 1
 

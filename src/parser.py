@@ -11,74 +11,80 @@ class Obj : # for Variable description
 
 class Parser :
   
-  def __init__(self) :
-    self._current = 0
-    self._tokens = []
-    self._lvars = {}
-    self._offset = 0 
+  _tokens = []
+  _current = 0
+  
+  _lvars = {}
+  _offset = 0 
 
-  def parse(self, tokens : list) -> Function :
+  @classmethod
+  def parse(cls, tokens : list) -> Function :
 
-    self._tokens = tokens    
+    cls._tokens = tokens    
 
     statements = [] # function's body
 
-    while not self._is_at_end() :
+    while not cls._is_at_end() :
       try:
-        stmt = self._statement()
+        stmt = cls._statement()
 
       except ParseError as err :
         error_collector.add(err)
-        self._syncronize(); continue
+        cls._syncronize(); continue
       else:
         # it only appends if no errors occurred during parsing
         # it's a valid statement
         statements.append(stmt) 
 
-    return Function(self._lvars, body = statements, stack_size = self._offset)
+    return Function(cls._lvars, body = statements, stack_size = cls._offset)
 
-  def _statement(self) -> Stmt:
+  @classmethod
+  def _statement(cls) -> Stmt:
     # statement -> exprStmt
-    return self._exprStmt()
+    return cls._exprStmt()
 
-  def _exprStmt(self) -> Stmt:
+  @classmethod
+  def _exprStmt(cls) -> Stmt:
     """
        matches the rule :
          exprStmt -> expression ";"
     """
-    expr = self._expression()
-    self._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
+    expr = cls._expression()
+    cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
     
     return Expression(expr) 
 
-  def _expression(self) -> Expr:
+  @classmethod
+  def _expression(cls) -> Expr:
     
     """
        matches the rule: 
          expression -> assignment
     """
-    return self._assignment()
+    return cls._assignment()
 
-  def _assignment(self) -> Expr:
+  @classmethod
+  def _assignment(cls) -> Expr:
     
     """ 
        matches the rule: 
          assignment -> equality ("=" assignment)?
     """
-    expr = self._equality()
+    expr = cls._equality()
 
-    if self._consume(TokenType.EQUAL) :
-      equals = self._previous()
+    if cls._consume(TokenType.EQUAL) :
+      equals = cls._previous()
       
       if not isinstance(expr, Variable) :
         raise ParseError(equals, "not an lvalue")
 
-      value = self._assignment()
+      value = cls._assignment()
       expr = Assign(expr, value)
 
     return expr
 
-  def _equality(self) -> Expr:
+  @classmethod
+  def _equality(cls) -> Expr:
     
     """
        matches to one of the rules: 
@@ -86,17 +92,18 @@ class Parser :
          equality -> comparison ("!=" comparison)*
     """
 
-    left = self._comparison()
+    left = cls._comparison()
 
-    while self._consume(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL) :
-      operator = self._previous()
-      right = self._comparison()
+    while cls._consume(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL) :
+      operator = cls._previous()
+      right = cls._comparison()
 
       left = Relational(left, operator, right)
 
     return left
   
-  def _comparison(self) -> Expr:
+  @classmethod
+  def _comparison(cls) -> Expr:
 
     """
        matches to one of the rules: 
@@ -106,14 +113,14 @@ class Parser :
          comparison -> addition (">=" addition)*
     """    
 
-    left = self._addition()
+    left = cls._addition()
 
-    while self._consume(TokenType.LESS, TokenType.LESS_EQUAL, 
+    while cls._consume(TokenType.LESS, TokenType.LESS_EQUAL, 
                         TokenType.GREATER, TokenType.GREATER_EQUAL) :
       
-      operator = self._previous()
+      operator = cls._previous()
 
-      right = self._addition()
+      right = cls._addition()
 
       if operator.kind in {TokenType.GREATER, TokenType.GREATER_EQUAL} :
         # don't need to support > and >= Assembly instructions, so A >= B will be translated to B <= A
@@ -123,7 +130,8 @@ class Parser :
 
     return left
 
-  def _addition(self) -> Expr:
+  @classmethod
+  def _addition(cls) -> Expr:
     
     """
        matches to one of the rules: 
@@ -131,17 +139,18 @@ class Parser :
          addition -> multiplication ("-" multiplication)*
     """    
 
-    left = self._multiplication()
+    left = cls._multiplication()
     
-    while self._consume(TokenType.PLUS, TokenType.MINUS) :
-      operator = self._previous()
-      right = self._multiplication()
+    while cls._consume(TokenType.PLUS, TokenType.MINUS) :
+      operator = cls._previous()
+      right = cls._multiplication()
      
       left = Binary(left, operator, right)
 
     return left
 
-  def _multiplication(self) -> Expr:
+  @classmethod
+  def _multiplication(cls) -> Expr:
     
     """
        matches to one of the rules: 
@@ -149,17 +158,18 @@ class Parser :
          multiplication -> unary ("/" unary)*
     """
 
-    left = self._unary()
+    left = cls._unary()
         
-    while self._consume(TokenType.SLASH, TokenType.STAR) :
-      operator = self._previous()
-      right = self._unary()
+    while cls._consume(TokenType.SLASH, TokenType.STAR) :
+      operator = cls._previous()
+      right = cls._unary()
      
       left = Binary(left, operator, right)
 
     return left
 
-  def _unary(self) -> Expr :
+  @classmethod
+  def _unary(cls) -> Expr :
     
     """
        matches to one of the rules:
@@ -167,18 +177,19 @@ class Parser :
          unary -> primary    
     """
 
-    if self._consume(TokenType.PLUS) :
-      return self._unary()
+    if cls._consume(TokenType.PLUS) :
+      return cls._unary()
 
-    if self._consume(TokenType.MINUS) :
-      operator = self._previous()
-      left = self._unary()      
+    if cls._consume(TokenType.MINUS) :
+      operator = cls._previous()
+      left = cls._unary()      
 
       return Unary(left, operator)
 
-    return self._primary()
+    return cls._primary()
 
-  def _primary(self) -> Expr:
+  @classmethod
+  def _primary(cls) -> Expr:
     
     """
        matches to one of the rules:
@@ -187,72 +198,79 @@ class Parser :
          primary -> "(" expression ")"
     """
 
-    if self._consume(TokenType.NUM) :
-      return Literal(self._previous().literal)
+    if cls._consume(TokenType.NUM) :
+      return Literal(cls._previous().literal)
 
-    elif self._consume(TokenType.IDENTIFIER) :
+    elif cls._consume(TokenType.IDENTIFIER) :
       
-      var_name = self._previous().lexeme
+      var_name = cls._previous().lexeme
 
-      if not var_name in self._lvars :
-        self._offset += 8
-        self._lvars[var_name] = Obj(-self._offset)
+      if not var_name in cls._lvars :
+        cls._offset += 8
+        cls._lvars[var_name] = Obj(-cls._offset)
 
-      return Variable(var_name, var_desc = self._lvars[var_name])
+      return Variable(var_name, var_desc = cls._lvars[var_name])
 
-    elif self._consume(TokenType.LEFT_PAREN) :
+    elif cls._consume(TokenType.LEFT_PAREN) :
       
-      left = self._expression()
-      self._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after expression")
+      left = cls._expression()
+      cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after expression")
       
       return left
 
     else :
-      raise ParseError(self._peek(), "invalid expression")
+      raise ParseError(cls._peek(), "invalid expression")
 
-  
-  def _is_at_end(self) -> bool:   
-    return self._peek().kind == TokenType.EOF
+  @classmethod 
+  def _is_at_end(cls) -> bool:   
+    return cls._peek().kind == TokenType.EOF
 
-  def _match(self, kind : TokenType) -> bool:
-    
-    return not self._is_at_end() and self._peek().kind == kind
+  @classmethod
+  def _match(cls, kind : TokenType) -> bool:
 
-  def _consume(self, *args : tuple) -> bool:
+    return not cls._is_at_end() and cls._peek().kind == kind
+
+  @classmethod
+  def _consume(cls, *args : tuple) -> bool:
     
     for token in args :
-      if self._match(token) :
-        self._current += 1 
+      if cls._match(token) :
+        cls._current += 1 
         return True      
     
     return False
 
-  def _peek(self) -> Token:
-    return self._tokens[self._current]
+  @classmethod
+  def _peek(cls) -> Token:
+    return cls._tokens[cls._current]
 
-  def _previous(self) -> Token:
-    return self._tokens[self._current - 1]
+  @classmethod
+  def _previous(cls) -> Token:
+    return cls._tokens[cls._current - 1]
 
-  def _advance(self) -> Token:
-    if not self._is_at_end():
-      self._current += 1
-    return self._previous()
+  @classmethod
+  def _advance(cls) -> Token:
+    if not cls._is_at_end():
+      cls._current += 1
+    return cls._previous()
 
-  def _expect(self, expected : TokenType, err_msg : str) -> Token:
-    if self._match(expected):
-      return self._advance()
+  @classmethod
+  def _expect(cls, expected : TokenType, err_msg : str) -> Token:
+    if cls._match(expected):
+      return cls._advance()
     else:
-      raise ParseError(self._peek(), err_msg)
+      raise ParseError(cls._peek(), err_msg)
     
-  def _syncronize(self) -> None :
+  @classmethod
+  def _syncronize(cls) -> None :
   
     begin_statement = {}
     end_statement = {TokenType.SEMICOLON}
 
-    while not self._is_at_end() :
+    while not cls._is_at_end() :
 
-      if self._previous().kind in end_statement : return
-      elif self._peek().kind in begin_statement : return
-      else : self._current += 1
+      if cls._previous().kind in end_statement : return
+      elif cls._peek().kind in begin_statement : return
+      else : cls._current += 1
 
 
