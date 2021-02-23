@@ -16,31 +16,32 @@ class Asm_Generator :
     print("main:")
    
     # Prologue
-    print("\t\tpushq %rbp")
-    print("\t\tmovq %rsp, %rbp")
+    print("\tpushq %rbp")
+    print("\tmovq %rsp, %rbp")
     
     if prog.stack_size != 0:
       prog.stack_size = cls._align_to(prog.stack_size, 16)
-      print("\t\tsubq $%d, %%rsp" %(prog.stack_size))
+      print("\tsubq $%d, %%rsp" %(prog.stack_size))
 
     for stmt in prog.body:
       cls._gen_stmt(stmt)
       assert(cls._depth == 0)    
 
+    print(".L.return:")
     # Epilogue
-    print("\t\tleave") # movq %rbp, %rsp; popq %rbp
-    print("\t\tret")
+    print("\tleave") # movq %rbp, %rsp; popq %rbp
+    print("\tret")
 
   @classmethod
   def _push(cls) -> None:
     
-    print("\t\tpushq %rax")
+    print("\tpushq %rax")
     cls._depth += 1
 
   @classmethod
   def _pop(cls, dest_reg : str) -> None:
     
-    print("\t\tpopq %s" %(dest_reg))
+    print("\tpopq %s" %(dest_reg))
     cls._depth -= 1
 
   @staticmethod
@@ -56,22 +57,27 @@ class Asm_Generator :
     if isinstance(stmt, Expression):
       cls._gen_expr(stmt.expression)
     
+    elif isinstance(stmt, Return):
+      if stmt.ret_value is not None:
+        cls._gen_expr(stmt.ret_value)
+      print("\tjmp .L.return")
+
   @classmethod
   def _gen_addr(cls, var_desc : Obj) -> None:
    
-    print("\t\tleaq %d(%%rbp), %%rax" %(var_desc.offset))
+    print("\tleaq %d(%%rbp), %%rax" %(var_desc.offset))
     return
 
   @classmethod
   def _gen_expr(cls, node : Expr):
 
     if isinstance(node, Literal):
-      print("\t\tmovq $%d, %%rax" %(node.value))
+      print("\tmovq $%d, %%rax" %(node.value))
       return
 
     if isinstance(node, Variable):
       cls._gen_addr(node.desc)
-      print("\t\tmovq (%rax), %rax")
+      print("\tmovq (%rax), %rax")
       return
 
     if isinstance(node, Assign):
@@ -79,13 +85,13 @@ class Asm_Generator :
       cls._push()      # pushq %rax
       cls._gen_expr(node.value)
       cls._pop("%rdi") # popq %rdi
-      print("\t\tmovq %rax, (%rdi)")
+      print("\tmovq %rax, (%rdi)")
       return
 
     if isinstance(node, Unary):
       if node.op.kind == TokenType.MINUS :
         cls._gen_expr(node.lhs)
-        print("\t\tnegq %rax") 
+        print("\tnegq %rax") 
         return  
 
     cls._gen_expr(node.rhs)
@@ -94,27 +100,27 @@ class Asm_Generator :
     cls._pop("%rdi") # popq %rdi
 
     if isinstance(node, Relational) :
-      print("\t\tcmpq %rdi, %rax")
+      print("\tcmpq %rdi, %rax")
 
       if node.op.kind == TokenType.EQUAL_EQUAL:
-        print("\t\tsete %al")
+        print("\tsete %al")
       elif node.op.kind == TokenType.BANG_EQUAL:
-        print("\t\tsetne %al")
+        print("\tsetne %al")
       elif node.op.kind in {TokenType.LESS, TokenType.GREATER}:
-        print("\t\tsetl %al")
+        print("\tsetl %al")
       elif node.op.kind in {TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL}:
-        print("\t\tsetle %al")
+        print("\tsetle %al")
 
-      print("\t\tmovzbq %al, %rax"); return
+      print("\tmovzbq %al, %rax"); return
 
     if isinstance(node, Binary) :
       if node.op.kind == TokenType.PLUS:
-        print("\t\taddq %rdi, %rax")
+        print("\taddq %rdi, %rax")
       elif node.op.kind == TokenType.MINUS:
-        print("\t\tsubq %rdi, %rax")
+        print("\tsubq %rdi, %rax")
       elif node.op.kind == TokenType.STAR:
-        print("\t\timulq %rdi, %rax")
+        print("\timulq %rdi, %rax")
       elif node.op.kind == TokenType.SLASH:
-        print("\t\tcqto") # extends signal %rax -> %rdx     
-        print("\t\tidivq %rdi")
+        print("\tcqto") # extends signal %rax -> %rdx     
+        print("\tidivq %rdi")
 

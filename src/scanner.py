@@ -11,6 +11,11 @@ class Scanner(object) :
   _source = ""       # character buffer to be tokenized       
   _line = 1
 
+  # C reserved keywords
+  _keywords = {
+    "return" : TokenType.RETURN,
+  }
+
   # punctuators characters
   _punct = {
     '('  : (lambda : Scanner._make_token(TokenType.LEFT_PAREN)),
@@ -96,9 +101,12 @@ class Scanner(object) :
       cls._current += 1
 
     lexeme = cls._source[cls._start : cls._current]
- 
-    return cls._make_token(TokenType.IDENTIFIER, lexeme)
-    
+
+    if lexeme not in cls._keywords : 
+      return cls._make_token(TokenType.IDENTIFIER, lexeme)
+    else :
+      return cls._make_token(cls._keywords[lexeme])    
+
   @classmethod
   def _eof(cls) -> bool :
     # checks if there is any character still to be processed from the buffer

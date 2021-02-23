@@ -40,8 +40,27 @@ class Parser :
 
   @classmethod
   def _statement(cls) -> Stmt:
-    # statement -> exprStmt
-    return cls._exprStmt()
+    """
+       matches to one of the rules :
+         statement -> exprStmt
+         statement -> returnStmt
+    """
+    if cls._consume(TokenType.RETURN):
+      return cls._returnStmt() 
+    else :
+      return cls._exprStmt()
+
+  @classmethod
+  def _returnStmt(cls) -> Stmt:    
+    """
+       matches the rule:
+         returnStmt -> "return" (expression)? ";"
+    """
+    value = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
+
+    cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
+  
+    return Return(value)
 
   @classmethod
   def _exprStmt(cls) -> Stmt:
@@ -233,8 +252,8 @@ class Parser :
   @classmethod
   def _consume(cls, *args : tuple) -> bool:
     
-    for token in args :
-      if cls._match(token) :
+    for token_kind in args :
+      if cls._match(token_kind) :
         cls._current += 1 
         return True      
     
