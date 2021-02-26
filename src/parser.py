@@ -9,34 +9,24 @@ class Obj : # for Variable description
   def __init__(self, offset : int = 0) :
     self.offset = offset
 
-class Parser :
-  
-  _tokens = []
-  _current = 0
-  
-  _lvars = {}
-  _offset = 0 
+class Parser : 
 
   @classmethod
   def parse(cls, tokens : list) -> Function :
 
-    cls._tokens = tokens    
+    cls._tokens = tokens
+    cls._current = 0
 
-    statements = [] # function's body
+    cls._lvars = dict()
+    cls._offset = 0
 
-    while not cls._is_at_end() :
-      try:
-        stmt = cls._statement()
-
-      except ParseError as err :
-        error_collector.add(err)
-        cls._syncronize(); continue
-      else:
-        # it only appends if no errors occurred during parsing
-        # it's a valid statement
-        statements.append(stmt) 
-
-    return Function(cls._lvars, body = statements, stack_size = cls._offset)
+    try:
+      body = cls._block() if cls._consume(TokenType.LEFT_BRACE) else None
+    except ParseError as err :
+      error_collector.add(err)
+      return None
+    else:
+      return Function(cls._lvars, body, stack_size = cls._offset)   
 
   @classmethod
   def _statement(cls) -> Stmt:
@@ -44,12 +34,40 @@ class Parser :
        matches to one of the rules :
          statement -> exprStmt
          statement -> returnStmt
+         statement -> block
     """
     if cls._consume(TokenType.RETURN):
-      return cls._returnStmt() 
+      return cls._returnStmt()
+    elif cls._consume(TokenType.LEFT_BRACE):
+      return cls._block()
     else :
       return cls._exprStmt()
+  
+  @classmethod
+  def _block(cls) -> Stmt:
+    """
+       matches the rule:
+         block -> "{" statement* "}"
+    """
+    
+    statements = []
+    
+    while not(cls._is_at_end() or cls._match(TokenType.RIGHT_BRACE)) :
+      try:
+        stmt = cls._statement()
+      except ParseError as err:
+        error_collector.add(err)
+        cls._syncronize(); continue
+      else:
+        # it only appends if no errors occurred during parsing
+        # it's a valid statement
+        statements.append(stmt)
+    
+    # it will consume correspondents '}' until EOF
+    cls._expect(TokenType.RIGHT_BRACE, err_msg = "expected declaration or statement at end of input")
 
+    return Block(statements)
+  
   @classmethod
   def _returnStmt(cls) -> Stmt:    
     """
@@ -247,11 +265,13 @@ class Parser :
   @classmethod
   def _match(cls, kind : TokenType) -> bool:
 
-    return not cls._is_at_end() and cls._peek().kind == kind
+    return cls._peek().kind == kind
 
   @classmethod
   def _consume(cls, *args : tuple) -> bool:
-    
+
+    if cls._is_at_end() : return False    
+
     for token_kind in args :
       if cls._match(token_kind) :
         cls._current += 1 
@@ -268,23 +288,18 @@ class Parser :
     return cls._tokens[cls._current - 1]
 
   @classmethod
-  def _advance(cls) -> Token:
-    if not cls._is_at_end():
-      cls._current += 1
-    return cls._previous()
-
-  @classmethod
   def _expect(cls, expected : TokenType, err_msg : str) -> Token:
     if cls._match(expected):
-      return cls._advance()
+      cls._current += 1
+      return cls._previous()
     else:
       raise ParseError(cls._peek(), err_msg)
     
   @classmethod
   def _syncronize(cls) -> None :
   
-    begin_statement = {}
-    end_statement = {TokenType.SEMICOLON}
+    begin_statement = {TokenType.RETURN}
+    end_statement = {TokenType.SEMICOLON, TokenType.RIGHT_BRACE}
 
     while not cls._is_at_end() :
 

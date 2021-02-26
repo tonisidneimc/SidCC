@@ -5,7 +5,9 @@ __all__ = ["Token"]
 _debug = {
   TokenType.SEMICOLON : "SEMICOLON",
   TokenType.LEFT_PAREN : "LEFT_PAREN", 
-  TokenType.RIGHT_PAREN : "RIGHT_PAREN", 
+  TokenType.RIGHT_PAREN : "RIGHT_PAREN",
+  TokenType.LEFT_BRACE : "LEFT_BRACE", 
+  TokenType.RIGHT_BRACE : "RIGHT_BRACE", 
   TokenType.PLUS : "PLUS",
   TokenType.MINUS : "MINUS",
   TokenType.SLASH : "SLASH",

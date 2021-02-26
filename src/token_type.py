@@ -3,7 +3,7 @@ __all__ = ["TokenType"]
 class TokenType :
   SEMICOLON, \
   \
-  LEFT_PAREN, RIGHT_PAREN, \
+  LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, \
   \
   PLUS, MINUS, SLASH, STAR, \
   \
@@ -14,6 +14,6 @@ class TokenType :
   \
   RETURN, \
   \
-  EOF =  range(19)
+  EOF =  range(21)
 
 

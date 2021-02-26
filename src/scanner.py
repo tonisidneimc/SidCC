@@ -4,12 +4,7 @@ from .errors import ScanError, error_collector
 
 __all__ = ["Scanner"]
 
-class Scanner(object) :    
-
-  _start = 0         # works as a pointer to the beginning of a token 
-  _current = 0       # works as a pointer to the end of a token
-  _source = ""       # character buffer to be tokenized       
-  _line = 1
+class Scanner(object) : 
 
   # C reserved keywords
   _keywords = {
@@ -20,6 +15,8 @@ class Scanner(object) :
   _punct = {
     '('  : (lambda : Scanner._make_token(TokenType.LEFT_PAREN)),
     ')'  : (lambda : Scanner._make_token(TokenType.RIGHT_PAREN)),
+    '{'  : (lambda : Scanner._make_token(TokenType.LEFT_BRACE)),
+    '}'  : (lambda : Scanner._make_token(TokenType.RIGHT_BRACE)),
     ';'  : (lambda : Scanner._make_token(TokenType.SEMICOLON)),
     '-'  : (lambda : Scanner._make_token(TokenType.MINUS)),
     '+'  : (lambda : Scanner._make_token(TokenType.PLUS)),
@@ -34,7 +31,10 @@ class Scanner(object) :
   @classmethod
   def tokenize(cls, source : str) -> list:	
     
-    cls._source = source
+    cls._source = source  # character buffer to be tokenized
+    cls._start = 0        # works as a pointer to the beginning of a token 
+    cls._current = 0      # works as a pointer to the end of a token              
+    cls._line = 1
 
     tk_list = []
     	

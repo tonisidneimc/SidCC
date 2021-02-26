@@ -23,9 +23,8 @@ class Asm_Generator :
       prog.stack_size = cls._align_to(prog.stack_size, 16)
       print("\tsubq $%d, %%rsp" %(prog.stack_size))
 
-    for stmt in prog.body:
-      cls._gen_stmt(stmt)
-      assert(cls._depth == 0)    
+    cls._gen_stmt(prog.body)
+    assert(cls._depth == 0)   
 
     print(".L.return:")
     # Epilogue
@@ -53,14 +52,19 @@ class Asm_Generator :
 
   @classmethod
   def _gen_stmt(cls, stmt : Stmt) -> None:
-    
-    if isinstance(stmt, Expression):
+
+    if isinstance(stmt, Block):
+      for statement in stmt.body:
+        cls._gen_stmt(statement)
+
+    elif isinstance(stmt, Expression):
       cls._gen_expr(stmt.expression)
     
     elif isinstance(stmt, Return):
       if stmt.ret_value is not None:
         cls._gen_expr(stmt.ret_value)
       print("\tjmp .L.return")
+
 
   @classmethod
   def _gen_addr(cls, var_desc : Obj) -> None:
