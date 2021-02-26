@@ -72,7 +72,7 @@ class Parser :
   def _returnStmt(cls) -> Stmt:    
     """
        matches the rule:
-         returnStmt -> "return" (expression)? ";"
+         returnStmt -> "return" expression? ";"
     """
     value = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
 
@@ -84,9 +84,9 @@ class Parser :
   def _exprStmt(cls) -> Stmt:
     """
        matches the rule :
-         exprStmt -> expression ";"
+         exprStmt -> expression? ";"
     """
-    expr = cls._expression()
+    expr = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
     cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
     
     return Expression(expr) 

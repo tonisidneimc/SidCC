@@ -58,7 +58,8 @@ class Asm_Generator :
         cls._gen_stmt(statement)
 
     elif isinstance(stmt, Expression):
-      cls._gen_expr(stmt.expression)
+      if stmt.expression is not None:
+        cls._gen_expr(stmt.expression)
     
     elif isinstance(stmt, Return):
       if stmt.ret_value is not None:
