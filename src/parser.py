@@ -33,10 +33,13 @@ class Parser :
     """
        matches to one of the rules :
          statement -> exprStmt
+         statement -> ifStmt
          statement -> returnStmt
          statement -> block
     """
-    if cls._consume(TokenType.RETURN):
+    if cls._consume(TokenType.IF) :
+      return cls._ifStmt()
+    elif cls._consume(TokenType.RETURN):
       return cls._returnStmt()
     elif cls._consume(TokenType.LEFT_BRACE):
       return cls._block()
@@ -67,7 +70,22 @@ class Parser :
     cls._expect(TokenType.RIGHT_BRACE, err_msg = "expected declaration or statement at end of input")
 
     return Block(statements)
-  
+
+  @classmethod
+  def _ifStmt(cls) -> Stmt:
+    """
+       matches the rule:
+         ifStmt -> "if" "(" expression ")" statement ("else" statement)?
+    """
+    cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'if'")
+    condition = cls._expression()
+    cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after if condition")
+        
+    then_branch = cls._statement()
+    else_branch = cls._statement() if cls._consume(TokenType.ELSE) else None 
+        
+    return If(condition, then_branch, else_branch) 
+
   @classmethod
   def _returnStmt(cls) -> Stmt:    
     """

@@ -64,4 +64,14 @@ assert 3 '{ 1; 2; return 3; }'
 assert 3 '{ {1; {2;} return 3;} }'
 assert 5 '{ ;;; return 5; }'
 
+assert 3 '{ if (0) return 2; return 3; }'
+assert 3 '{ if (1-1) return 2; return 3; }'
+assert 2 '{ if (1) return 2; return 3; }'
+assert 2 '{ if (2-1) return 2; return 3; }'
+assert 4 '{ if (0) { 1; 2; return 3; } else { return 4; } }'
+assert 3 '{ if (1) { 1; 2; return 3; } else { return 4; } }'
+
+assert 2 '{a=3; b=2; if(a<=b) return a; else return b;}'
+assert 3 '{a=3; b=2; if(a>b) return a; else return b;}'
+
 echo OK

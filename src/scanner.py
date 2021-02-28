@@ -8,6 +8,8 @@ class Scanner(object) :
 
   # C reserved keywords
   _keywords = {
+    "if"     : TokenType.IF,
+    "else"   : TokenType.ELSE,
     "return" : TokenType.RETURN,
   }
 

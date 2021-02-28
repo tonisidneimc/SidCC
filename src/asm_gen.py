@@ -7,6 +7,7 @@ from .parser import Obj
 class Asm_Generator :
   
   _depth = 0
+  _label_count = 0
 
   @classmethod
   def gen(cls, prog : Function) -> None: 
@@ -32,6 +33,11 @@ class Asm_Generator :
     print("\tret")
 
   @classmethod
+  def _count(cls) -> int:
+    cls._label_count += 1
+    return cls._label_count
+
+  @classmethod
   def _push(cls) -> None:
     
     print("\tpushq %rax")
@@ -53,7 +59,23 @@ class Asm_Generator :
   @classmethod
   def _gen_stmt(cls, stmt : Stmt) -> None:
 
-    if isinstance(stmt, Block):
+    if isinstance(stmt, If):
+      lc = cls._count()
+      
+      cls._gen_expr(stmt.condition)
+      print("\tcmpq $0, %rax")
+      print("\tje .L.else.%d" %(lc))
+      
+      cls._gen_stmt(stmt.then_branch)
+      print("\tjmp .L.end.%d" %(lc))
+      
+      print(".L.else.%d:" %(lc))
+      if stmt.else_branch is not None:
+        cls._gen_stmt(stmt.else_branch)
+      
+      print(".L.end.%d:" %(lc))
+
+    elif isinstance(stmt, Block):
       for statement in stmt.body:
         cls._gen_stmt(statement)
 

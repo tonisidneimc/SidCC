@@ -12,8 +12,8 @@ class TokenType :
   \
   IDENTIFIER, NUM, \
   \
-  RETURN, \
+  ELSE, IF, RETURN, \
   \
-  EOF =  range(21)
+  EOF =  range(23)
 
 

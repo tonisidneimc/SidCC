@@ -21,4 +21,9 @@ class Function(Stmt) :
     self.stack_size = stack_size
     self.lvars = lvars
 
+class If(Stmt) :
+  def __init__(self, condition : Expr, then_branch : Stmt, else_branch : Stmt) :
+    self.condition = condition
+    self.then_branch = then_branch
+    self.else_branch = else_branch
 
