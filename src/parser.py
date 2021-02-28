@@ -42,6 +42,8 @@ class Parser :
       return cls._ifStmt()
     elif cls._consume(TokenType.FOR) :
       return cls._forStmt()
+    elif cls._consume(TokenType.WHILE) :
+      return cls._whileStmt()
     elif cls._consume(TokenType.RETURN):
       return cls._returnStmt()
     elif cls._consume(TokenType.LEFT_BRACE):
@@ -107,6 +109,20 @@ class Parser :
     body = cls._statement()
  
     return For(initializer, condition, increment, body)  
+
+  @classmethod
+  def _whileStmt(cls) -> Stmt:
+    """
+       matches the rule:
+         whileStmt -> "while" "(" expression ")" statement
+    """
+    cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'while'")
+    condition = cls._expression()
+    cls._consume(TokenType.RIGHT_PAREN)
+
+    body = cls._statement()
+
+    return For(init = None, cond = condition, inc = None, body = body)
 
   @classmethod
   def _returnStmt(cls) -> Stmt:    

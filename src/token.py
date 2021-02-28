@@ -24,6 +24,7 @@ _debug = {
   TokenType.IF : "IF",
   TokenType.ELSE : "ELSE",
   TokenType.FOR : "FOR",
+  TokenType.WHILE : "WHILE",
   TokenType.RETURN : "RETURN",
   TokenType.NUM : "NUM",
   TokenType.EOF : "EOF"

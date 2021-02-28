@@ -28,9 +28,9 @@ class If(Stmt) :
     self.else_branch = else_branch
 
 class For(Stmt) :
-  def __init__(self, init : Stmt, condition : Expr, inc : Expr, body : Stmt) :
+  def __init__(self, init : Stmt, cond : Expr, inc : Expr, body : Stmt) :
     self.init = init
-    self.condition = condition
+    self.condition = cond
     self.body = body
     self.inc = inc
 
