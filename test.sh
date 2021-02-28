@@ -74,4 +74,7 @@ assert 3 '{ if (1) { 1; 2; return 3; } else { return 4; } }'
 assert 2 '{a=3; b=2; if(a<=b) return a; else return b;}'
 assert 3 '{a=3; b=2; if(a>b) return a; else return b;}'
 
+assert 55 '{ i=0; j=0; for (i=0; i<=10; i=i+1) j=i+j; return j; }'
+assert 3 '{ for (;;) {return 3;} return 5; }'
+
 echo OK

@@ -34,11 +34,14 @@ class Parser :
        matches to one of the rules :
          statement -> exprStmt
          statement -> ifStmt
+         statement -> forStmt
          statement -> returnStmt
          statement -> block
     """
     if cls._consume(TokenType.IF) :
       return cls._ifStmt()
+    elif cls._consume(TokenType.FOR) :
+      return cls._forStmt()
     elif cls._consume(TokenType.RETURN):
       return cls._returnStmt()
     elif cls._consume(TokenType.LEFT_BRACE):
@@ -85,6 +88,25 @@ class Parser :
     else_branch = cls._statement() if cls._consume(TokenType.ELSE) else None 
         
     return If(condition, then_branch, else_branch) 
+
+  @classmethod 
+  def _forStmt(cls) -> Stmt:
+    """
+       matches the rule:  
+         forStmt -> "for" "(" exprStmt expression? ";" expression? ")" statement
+    """
+    cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'for'")
+    initializer = cls._exprStmt()
+
+    condition = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
+    cls._consume(TokenType.SEMICOLON)
+
+    increment = cls._expression() if not cls._match(TokenType.RIGHT_PAREN) else None
+    cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
+
+    body = cls._statement()
+ 
+    return For(initializer, condition, increment, body)  
 
   @classmethod
   def _returnStmt(cls) -> Stmt:    

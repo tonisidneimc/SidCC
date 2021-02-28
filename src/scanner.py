@@ -10,6 +10,7 @@ class Scanner(object) :
   _keywords = {
     "if"     : TokenType.IF,
     "else"   : TokenType.ELSE,
+    "for"    : TokenType.FOR,
     "return" : TokenType.RETURN,
   }
 

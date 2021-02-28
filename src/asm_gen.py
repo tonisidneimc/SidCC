@@ -75,6 +75,25 @@ class Asm_Generator :
       
       print(".L.end.%d:" %(lc))
 
+    elif isinstance(stmt, For):
+      lc = cls._count()
+
+      cls._gen_stmt(stmt.init)
+      
+      print(".L.begin.%d:" %(lc))
+      if stmt.condition is not None:
+        cls._gen_expr(stmt.condition)
+        print("\tcmpq $0, %rax")
+        print("\tje .L.end.%d" %(lc))
+
+      cls._gen_stmt(stmt.body)
+      
+      if stmt.inc is not None:
+        cls._gen_expr(stmt.inc)
+
+      print("\tjmp .L.begin.%d" %(lc))
+      print(".L.end.%d:" %(lc))
+
     elif isinstance(stmt, Block):
       for statement in stmt.body:
         cls._gen_stmt(statement)
@@ -87,7 +106,6 @@ class Asm_Generator :
       if stmt.ret_value is not None:
         cls._gen_expr(stmt.ret_value)
       print("\tjmp .L.return")
-
 
   @classmethod
   def _gen_addr(cls, var_desc : Obj) -> None:
