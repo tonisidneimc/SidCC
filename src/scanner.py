@@ -1,6 +1,6 @@
 from .token import *
 from .token_type import *
-from .errors import ScanError, error_collector
+from .errors import LexErr, error_collector
 
 __all__ = ["Scanner"]
 
@@ -29,7 +29,8 @@ class Scanner(object) :
     '!'  : (lambda : Scanner._make_token(TokenType.BANG_EQUAL if Scanner._match("=") else TokenType.BANG)),
     '='  : (lambda : Scanner._make_token(TokenType.EQUAL_EQUAL if Scanner._match('=') else TokenType.EQUAL)),
     '>'  : (lambda : Scanner._make_token(TokenType.GREATER_EQUAL if Scanner._match('=') else TokenType.GREATER)),
-    '<'  : (lambda : Scanner._make_token(TokenType.LESS_EQUAL if Scanner._match('=') else TokenType.LESS))
+    '<'  : (lambda : Scanner._make_token(TokenType.LESS_EQUAL if Scanner._match('=') else TokenType.LESS)),
+    '&'  : (lambda : Scanner._make_token(TokenType.AMPERSAND)),
   }
 
   @classmethod
@@ -45,7 +46,7 @@ class Scanner(object) :
     while not cls._eof() :                
       try :			
         token = cls._scan_token()
-      except ScanError as err :
+      except LexErr as err :
         error_collector.add(err)	
       else :
         tk_list.append(token)
@@ -76,7 +77,7 @@ class Scanner(object) :
       return cls._identifier() 
     
     else : 
-      raise ScanError(f"unexpected character '{c}'", cls._line, cls._current - 1)
+      raise LexErr(f"unexpected character '{c}'", cls._line, cls._current - 1)
             
   @classmethod
   def _make_token(cls, kind : TokenType, literal : object = None) -> Token :

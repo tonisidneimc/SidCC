@@ -7,7 +7,7 @@ error_color = "\x1B[31m"
 warning_color = "\x1B[33m"    
 reset_color = "\x1B[0m"
 
-class CompilerError(Exception) :
+class CompileError(Exception) :
   def __init__(self, msg : str, row : int, col : int, warning : bool=False):
     self.message = msg
     self.warning = warning
@@ -16,7 +16,7 @@ class CompilerError(Exception) :
   
   def __str__(self) : pass
 
-class ScanError(CompilerError) :
+class LexErr(CompileError) :
   def __init__(self, message : str, row : int, col : int) :	
     super().__init__(message, row, col)
     
@@ -26,7 +26,7 @@ class ScanError(CompilerError) :
     
     return f"{bold_color}{where}:{error_color} error:{reset_color} {self.message}\n"
 
-class ParseError(CompilerError) :
+class SyntaxErr(CompileError) :
   def __init__(self, tk_info : Token, message : str, warning : bool=False) :
     super().__init__(message, tk_info.row, tk_info.col, warning)
 
@@ -48,7 +48,7 @@ class ErrorCollector :
   def set_source(self, source : str) :
     self.source = source.split('\n')
 
-  def add(self, issue : CompilerError) :
+  def add(self, issue : CompileError) :
     self.issues.append(issue)
 	
   def ok(self) :

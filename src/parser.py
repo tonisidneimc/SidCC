@@ -3,16 +3,16 @@ from .token import *
 from .token_type import *
 from .expr import *
 from .stmt import *
-from .errors import ParseError, error_collector
+from .errors import SyntaxErr, error_collector
 
-class Obj : # for Variable description
+class Object : # for Variable description
   def __init__(self, offset : int = 0) :
     self.offset = offset
 
 class Parser : 
 
   @classmethod
-  def parse(cls, tokens : list) -> Function :
+  def parse(cls, tokens : list) -> FunctionStmt :
 
     cls._tokens = tokens
     cls._current = 0
@@ -21,12 +21,16 @@ class Parser :
     cls._offset = 0
 
     try:
-      body = cls._block() if cls._consume(TokenType.LEFT_BRACE) else None
-    except ParseError as err :
+      if cls._match(TokenType.LEFT_BRACE) :
+        cls._consume_current()
+        body = cls._compoundStmt()
+      else :
+        body = None
+    except SyntaxErr as err :
       error_collector.add(err)
-      return None
+      return None # ensure later that it won't be compiled
     else:
-      return Function(cls._lvars, body, stack_size = cls._offset)   
+      return FunctionStmt(cls._lvars, body, stack_size = cls._offset)   
 
   @classmethod
   def _statement(cls) -> Stmt:
@@ -34,36 +38,41 @@ class Parser :
        matches to one of the rules :
          statement -> exprStmt
          statement -> ifStmt
+         statement -> compoundStmt
          statement -> forStmt
          statement -> returnStmt
-         statement -> block
     """
-    if cls._consume(TokenType.IF) :
-      return cls._ifStmt()
-    elif cls._consume(TokenType.FOR) :
-      return cls._forStmt()
-    elif cls._consume(TokenType.WHILE) :
-      return cls._whileStmt()
-    elif cls._consume(TokenType.RETURN):
-      return cls._returnStmt()
-    elif cls._consume(TokenType.LEFT_BRACE):
-      return cls._block()
+    _statements = {
+      TokenType.IF         : cls._ifStmt,
+      TokenType.FOR        : cls._forStmt,
+      TokenType.WHILE      : cls._whileStmt,
+      TokenType.RETURN     : cls._returnStmt,
+      TokenType.LEFT_BRACE : cls._compoundStmt,
+    }
+
+    token_kind = cls._peek().kind
+
+    if token_kind in _statements:
+      cls._consume_current()
+      return _statements[token_kind]()
     else :
       return cls._exprStmt()
   
   @classmethod
-  def _block(cls) -> Stmt:
+  def _compoundStmt(cls) -> Stmt:
     """
        matches the rule:
-         block -> "{" statement* "}"
+         compoundStmt -> "{" statement* "}"
     """
-    
     statements = []
     
-    while not(cls._is_at_end() or cls._match(TokenType.RIGHT_BRACE)) :
+    while not cls._match(TokenType.RIGHT_BRACE) :
+      
+      if cls._is_at_end() : break
+
       try:
         stmt = cls._statement()
-      except ParseError as err:
+      except SyntaxErr as err:
         error_collector.add(err)
         cls._syncronize(); continue
       else:
@@ -74,7 +83,7 @@ class Parser :
     # it will consume correspondents '}' until EOF
     cls._expect(TokenType.RIGHT_BRACE, err_msg = "expected declaration or statement at end of input")
 
-    return Block(statements)
+    return CompoundStmt(statements)
 
   @classmethod
   def _ifStmt(cls) -> Stmt:
@@ -87,9 +96,13 @@ class Parser :
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after if condition")
         
     then_branch = cls._statement()
-    else_branch = cls._statement() if cls._consume(TokenType.ELSE) else None 
-        
-    return If(condition, then_branch, else_branch) 
+
+    else_branch = None
+    if cls._match(TokenType.ELSE) :
+      cls._consume_current()
+      else_branch = cls._statement()
+    
+    return IfStmt(condition, then_branch, else_branch) 
 
   @classmethod 
   def _forStmt(cls) -> Stmt:
@@ -101,14 +114,14 @@ class Parser :
     initializer = cls._exprStmt()
 
     condition = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
-    cls._consume(TokenType.SEMICOLON)
+    cls._consume_current() # consumes ';'
 
     increment = cls._expression() if not cls._match(TokenType.RIGHT_PAREN) else None
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
 
     body = cls._statement()
  
-    return For(initializer, condition, increment, body)  
+    return ForStmt(initializer, condition, increment, body)  
 
   @classmethod
   def _whileStmt(cls) -> Stmt:
@@ -118,11 +131,11 @@ class Parser :
     """
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'while'")
     condition = cls._expression()
-    cls._consume(TokenType.RIGHT_PAREN)
+    cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after condition")
 
     body = cls._statement()
 
-    return For(init = None, cond = condition, inc = None, body = body)
+    return ForStmt(init = None, cond = condition, inc = None, body = body)
 
   @classmethod
   def _returnStmt(cls) -> Stmt:    
@@ -134,7 +147,7 @@ class Parser :
 
     cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
   
-    return Return(value)
+    return ReturnStmt(value)
 
   @classmethod
   def _exprStmt(cls) -> Stmt:
@@ -143,9 +156,10 @@ class Parser :
          exprStmt -> expression? ";"
     """
     expr = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
+
     cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
     
-    return Expression(expr) 
+    return ExpressionStmt(expr) 
 
   @classmethod
   def _expression(cls) -> Expr:
@@ -165,14 +179,18 @@ class Parser :
     """
     expr = cls._equality()
 
-    if cls._consume(TokenType.EQUAL) :
-      equals = cls._previous()
-      
-      if not isinstance(expr, Variable) :
-        raise ParseError(equals, "not an lvalue")
+    if cls._match(TokenType.EQUAL) :
 
-      value = cls._assignment()
-      expr = Assign(expr, value)
+      equals = cls._consume_current()
+
+      try:
+        # can only cascade variables and dereferences in an assignment
+        assert expr.is_variable or (expr.is_unary and expr.is_deref)
+      except AssertionError:
+        raise SyntaxErr(equals, "not an lvalue")
+      else:  
+        value = cls._assignment()
+        expr = AssignExpr(expr, value)
 
     return expr
 
@@ -187,11 +205,11 @@ class Parser :
 
     left = cls._comparison()
 
-    while cls._consume(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL) :
-      operator = cls._previous()
+    while cls._match(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL) :
+      operator = cls._consume_current()
       right = cls._comparison()
 
-      left = Relational(left, operator, right)
+      left = BinaryExpr(left, operator, right)
 
     return left
   
@@ -208,18 +226,18 @@ class Parser :
 
     left = cls._addition()
 
-    while cls._consume(TokenType.LESS, TokenType.LESS_EQUAL, 
-                        TokenType.GREATER, TokenType.GREATER_EQUAL) :
+    while cls._match(TokenType.LESS, TokenType.LESS_EQUAL, 
+                     TokenType.GREATER, TokenType.GREATER_EQUAL) :
       
-      operator = cls._previous()
+      operator = cls._consume_current()
 
       right = cls._addition()
 
       if operator.kind in {TokenType.GREATER, TokenType.GREATER_EQUAL} :
         # don't need to support > and >= Assembly instructions, so A >= B will be translated to B <= A
-        left = Relational(right, operator, left)  
+        left = BinaryExpr(right, operator, left)  
       else:
-        left = Relational(left, operator, right)
+        left = BinaryExpr(left, operator, right)
 
     return left
 
@@ -234,11 +252,11 @@ class Parser :
 
     left = cls._multiplication()
     
-    while cls._consume(TokenType.PLUS, TokenType.MINUS) :
-      operator = cls._previous()
+    while cls._match(TokenType.PLUS, TokenType.MINUS) :
+      operator = cls._consume_current()
       right = cls._multiplication()
      
-      left = Binary(left, operator, right)
+      left = BinaryExpr(left, operator, right)
 
     return left
 
@@ -253,11 +271,11 @@ class Parser :
 
     left = cls._unary()
         
-    while cls._consume(TokenType.SLASH, TokenType.STAR) :
-      operator = cls._previous()
+    while cls._match(TokenType.SLASH, TokenType.STAR) :
+      operator = cls._consume_current()
       right = cls._unary()
      
-      left = Binary(left, operator, right)
+      left = BinaryExpr(left, operator, right)
 
     return left
 
@@ -266,18 +284,19 @@ class Parser :
     
     """
        matches to one of the rules:
-         unary -> ("+" | "-")? unary
+         unary -> ("+" | "-" | "&" | "*")? unary
          unary -> primary    
     """
 
-    if cls._consume(TokenType.PLUS) :
+    if cls._match(TokenType.PLUS) : # ignores it
+      cls._consume_current()
       return cls._unary()
 
-    if cls._consume(TokenType.MINUS) :
-      operator = cls._previous()
+    elif cls._match(TokenType.MINUS, TokenType.AMPERSAND, TokenType.STAR) :
+      operator = cls._consume_current()
       left = cls._unary()      
 
-      return Unary(left, operator)
+      return UnaryExpr(left, operator)
 
     return cls._primary()
 
@@ -291,57 +310,58 @@ class Parser :
          primary -> "(" expression ")"
     """
 
-    if cls._consume(TokenType.NUM) :
-      return Literal(cls._previous().literal)
+    if cls._match(TokenType.NUM) :
+      curr_token = cls._consume_current()
+      return LiteralExpr(curr_token.literal)
 
-    elif cls._consume(TokenType.IDENTIFIER) :
+    elif cls._match(TokenType.IDENTIFIER) :
       
-      var_name = cls._previous().lexeme
+      var_name = cls._consume_current().lexeme
 
       if not var_name in cls._lvars :
         cls._offset += 8
-        cls._lvars[var_name] = Obj(-cls._offset)
+        cls._lvars[var_name] = Object(-(cls._offset))
 
-      return Variable(var_name, var_desc = cls._lvars[var_name])
+      return VariableExpr(var_name, var_desc = cls._lvars[var_name])
 
-    elif cls._consume(TokenType.LEFT_PAREN) :
-      
+    elif cls._match(TokenType.LEFT_PAREN) :
+      # grouping expression
+      cls._consume_current()
       left = cls._expression()
       cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after expression")
       
       return left
 
     else :
-      raise ParseError(cls._peek(), "invalid expression")
-
-  @classmethod 
-  def _is_at_end(cls) -> bool:   
-    return cls._peek().kind == TokenType.EOF
-
-  @classmethod
-  def _match(cls, kind : TokenType) -> bool:
-
-    return cls._peek().kind == kind
-
-  @classmethod
-  def _consume(cls, *args : tuple) -> bool:
-
-    if cls._is_at_end() : return False    
-
-    for token_kind in args :
-      if cls._match(token_kind) :
-        cls._current += 1 
-        return True      
-    
-    return False
+      raise SyntaxErr(cls._peek(), "invalid expression")
 
   @classmethod
   def _peek(cls) -> Token:
     return cls._tokens[cls._current]
 
   @classmethod
-  def _previous(cls) -> Token:
-    return cls._tokens[cls._current - 1]
+  def _previous(self) -> Token :
+    #returns the last consumed Token from _tokens
+    return self._tokens[self._current - 1]
+
+  @classmethod 
+  def _is_at_end(cls) -> bool:   
+    return cls._peek().kind == TokenType.EOF
+
+  @classmethod
+  def _match(cls, *args : tuple) -> bool:
+    if cls._is_at_end() : 
+      return False
+    else : 
+      for token_kind in args :
+        if cls._peek().kind == token_kind:
+          return True
+      return False
+
+  @classmethod
+  def _consume_current(cls) -> Token:
+    cls._current += 1
+    return cls._previous()
 
   @classmethod
   def _expect(cls, expected : TokenType, err_msg : str) -> Token:
@@ -349,12 +369,16 @@ class Parser :
       cls._current += 1
       return cls._previous()
     else:
-      raise ParseError(cls._peek(), err_msg)
+      raise SyntaxErr(cls._peek(), err_msg)
     
   @classmethod
   def _syncronize(cls) -> None :
   
-    begin_statement = {TokenType.RETURN}
+    begin_statement = {
+      TokenType.IF,
+      TokenType.FOR, TokenType.WHILE,
+      TokenType.RETURN,
+    }
     end_statement = {TokenType.SEMICOLON, TokenType.RIGHT_BRACE}
 
     while not cls._is_at_end() :

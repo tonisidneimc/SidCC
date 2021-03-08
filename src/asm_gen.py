@@ -1,8 +1,7 @@
 
-from .token_type import *
 from .stmt import *
 from .expr import *
-from .parser import Obj
+from .parser import Object
 
 class Asm_Generator :
   
@@ -10,7 +9,7 @@ class Asm_Generator :
   _label_count = 0
 
   @classmethod
-  def gen(cls, prog : Function) -> None: 
+  def gen(cls, prog : FunctionStmt) -> None: 
    
     print(".text")
     print("\t.globl main")
@@ -33,7 +32,7 @@ class Asm_Generator :
     print("\tret")
 
   @classmethod
-  def _count(cls) -> int:
+  def _request_label(cls) -> int:
     cls._label_count += 1
     return cls._label_count
 
@@ -59,8 +58,8 @@ class Asm_Generator :
   @classmethod
   def _gen_stmt(cls, stmt : Stmt) -> None:
 
-    if isinstance(stmt, If):
-      lc = cls._count()
+    if stmt.is_if_stmt:
+      lc = cls._request_label()
       
       cls._gen_expr(stmt.condition)
       print("\tcmpq $0, %rax")
@@ -75,10 +74,11 @@ class Asm_Generator :
       
       print(".L.end.%d:" %(lc))
 
-    elif isinstance(stmt, For):
-      lc = cls._count()
+    elif stmt.is_for_stmt:
+      lc = cls._request_label()
 
-      cls._gen_stmt(stmt.init)
+      if stmt.init is not None: 
+        cls._gen_stmt(stmt.init)
       
       print(".L.begin.%d:" %(lc))
       if stmt.condition is not None:
@@ -94,78 +94,117 @@ class Asm_Generator :
       print("\tjmp .L.begin.%d" %(lc))
       print(".L.end.%d:" %(lc))
 
-    elif isinstance(stmt, Block):
+    elif stmt.is_compound_stmt:
       for statement in stmt.body:
         cls._gen_stmt(statement)
 
-    elif isinstance(stmt, Expression):
+    elif stmt.is_expression_stmt:
       if stmt.expression is not None:
         cls._gen_expr(stmt.expression)
     
-    elif isinstance(stmt, Return):
+    elif stmt.is_return_stmt:
       if stmt.ret_value is not None:
         cls._gen_expr(stmt.ret_value)
       print("\tjmp .L.return")
 
   @classmethod
-  def _gen_addr(cls, var_desc : Obj) -> None:
-   
-    print("\tleaq %d(%%rbp), %%rax" %(var_desc.offset))
-    return
+  def _gen_addr(cls, node : Expr) -> None:
+    
+    if node.is_variable:
+      print("\tleaq %d(%%rbp), %%rax" %(node.var_desc.offset))
+      return
+    
+    elif node.is_unary and node.is_deref:
+      # dereference expression
+      cls._gen_expr(node.lhs)
+      return
 
   @classmethod
-  def _gen_expr(cls, node : Expr):
+  def _gen_expr_unary(cls, node : Expr) -> None:  
 
-    if isinstance(node, Literal):
-      print("\tmovq $%d, %%rax" %(node.value))
+    assert(node.is_unary) # security check only  
+
+    if node.is_address_of :
+      # address_of expression 
+      cls._gen_addr(node.lhs)
       return
+    else:
+      cls._gen_expr(node.lhs)
 
-    if isinstance(node, Variable):
-      cls._gen_addr(node.desc)
-      print("\tmovq (%rax), %rax")
-      return
-
-    if isinstance(node, Assign):
-      cls._gen_addr(node.lhs.desc)
-      cls._push()      # pushq %rax
-      cls._gen_expr(node.value)
-      cls._pop("%rdi") # popq %rdi
-      print("\tmovq %rax, (%rdi)")
-      return
-
-    if isinstance(node, Unary):
-      if node.op.kind == TokenType.MINUS :
-        cls._gen_expr(node.lhs)
+      if node.is_neg:
+        # negate expression
         print("\tnegq %rax") 
-        return  
+        return
+
+      elif node.is_deref:
+        # dereference expression
+        print("\tmovq (%rax), %rax")
+        return    
+
+  @classmethod
+  def _gen_expr_binary(cls, node : Expr) -> None:
+
+    assert(node.is_binary) # security check only
 
     cls._gen_expr(node.rhs)
     cls._push()      # pushq %rax
     cls._gen_expr(node.lhs)
     cls._pop("%rdi") # popq %rdi
 
-    if isinstance(node, Relational) :
+    if node.is_add:
+      print("\taddq %rdi, %rax")
+    
+    elif node.is_sub:
+      print("\tsubq %rdi, %rax")
+    
+    elif node.is_mul:
+      print("\timulq %rdi, %rax")
+    
+    elif node.is_div:
+      print("\tcqto") # extends signal %rax -> %rdx     
+      print("\tidivq %rdi")
+    
+    else: # relational expression
       print("\tcmpq %rdi, %rax")
 
-      if node.op.kind == TokenType.EQUAL_EQUAL:
+      if node.is_cmp_eq:
         print("\tsete %al")
-      elif node.op.kind == TokenType.BANG_EQUAL:
+      
+      elif node.is_cmp_ne:
         print("\tsetne %al")
-      elif node.op.kind in {TokenType.LESS, TokenType.GREATER}:
+      
+      elif node.is_cmp_less:
         print("\tsetl %al")
-      elif node.op.kind in {TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL}:
+      
+      elif node.is_cmp_leq:
         print("\tsetle %al")
 
-      print("\tmovzbq %al, %rax"); return
+      print("\tmovzbq %al, %rax")
 
-    if isinstance(node, Binary) :
-      if node.op.kind == TokenType.PLUS:
-        print("\taddq %rdi, %rax")
-      elif node.op.kind == TokenType.MINUS:
-        print("\tsubq %rdi, %rax")
-      elif node.op.kind == TokenType.STAR:
-        print("\timulq %rdi, %rax")
-      elif node.op.kind == TokenType.SLASH:
-        print("\tcqto") # extends signal %rax -> %rdx     
-        print("\tidivq %rdi")
+  @classmethod
+  def _gen_expr(cls, node : Expr) -> None:
+
+    if node.is_literal:
+      print("\tmovq $%d, %%rax" %(node.value))
+      return
+
+    elif node.is_variable:
+      cls._gen_addr(node)
+      print("\tmovq (%rax), %rax")
+      return
+
+    elif node.is_assignment:
+      cls._gen_addr(node.lhs)
+      cls._push()      # pushq %rax
+      cls._gen_expr(node.value)
+      cls._pop("%rdi") # popq %rdi
+      print("\tmovq %rax, (%rdi)")
+      return
+
+    elif node.is_unary:
+      cls._gen_expr_unary(node)
+      
+    elif node.is_binary:
+      cls._gen_expr_binary(node)
+
 

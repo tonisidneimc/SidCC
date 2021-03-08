@@ -6,6 +6,7 @@ class TokenType :
   LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, \
   \
   PLUS, MINUS, SLASH, STAR, \
+  AMPERSAND, \
   \
   BANG, BANG_EQUAL, EQUAL, EQUAL_EQUAL, \
   GREATER, GREATER_EQUAL, LESS, LESS_EQUAL, \
@@ -14,6 +15,6 @@ class TokenType :
   \
   ELSE, FOR, IF, RETURN, WHILE, \
   \
-  EOF =  range(25)
+  EOF =  range(26)
 
 
