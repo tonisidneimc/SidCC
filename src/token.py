@@ -32,9 +32,9 @@ _debug = {
 }
 
 class Token(object):
-  __slots__ = ("col", "lexeme", "literal", "kind", "row")
     
-  def __init__(self, kind : TokenType, lexeme : str, literal : object, row : int = 1, col : int = 0) :
+  def __init__(self, kind : TokenType, lexeme : str, literal : object, 
+                                          row : int = 1, col : int = 0) :
     self.kind = kind
     self.lexeme = lexeme
     self.literal = literal
@@ -43,5 +43,13 @@ class Token(object):
 
   def __str__(self) -> str:
 
-    return _debug[self.kind] + " '" + self.lexeme + "'"
-    
+    token_kind = _debug[self.kind]
+
+    return "{:<14s} -> \'{:<}\'".format(token_kind, self.lexeme)
+
+  def __copy__(self) :
+
+    result = type(self).__new__(self.__class__)
+    result.__dict__.update(self.__dict__)
+    return result
+

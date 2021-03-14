@@ -10,7 +10,7 @@ class Asm_Generator :
 
   @classmethod
   def gen(cls, prog : FunctionStmt) -> None: 
-   
+
     print(".text")
     print("\t.globl main")
     print("main:")
@@ -24,6 +24,7 @@ class Asm_Generator :
       print("\tsubq $%d, %%rsp" %(prog.stack_size))
 
     cls._gen_stmt(prog.body)
+
     assert(cls._depth == 0)   
 
     print(".L.return:")
@@ -124,7 +125,7 @@ class Asm_Generator :
 
     assert(node.is_unary) # security check only  
 
-    if node.is_address_of :
+    if node.is_addressing :
       # address_of expression 
       cls._gen_addr(node.lhs)
       return

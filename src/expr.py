@@ -2,7 +2,8 @@ from .token import *
 from .token_type import *
 
 class Expr(object) :
-  def __init__(self) : pass
+  
+  operand_type = None
 
   @property
   def is_unary(self) -> bool:
@@ -34,7 +35,7 @@ class UnaryExpr (Expr) :
     return self.op.kind == TokenType.MINUS
 
   @property
-  def is_address_of(self) -> bool: 
+  def is_addressing(self) -> bool: 
     return self.op.kind == TokenType.AMPERSAND
 
   @property
@@ -60,9 +61,15 @@ class BinaryExpr (Expr) :
     return self.op.kind == TokenType.LESS or \
            self.op.kind == TokenType.GREATER
 
+  @property
   def is_cmp_leq(self) -> bool:
     return self.op.kind == TokenType.LESS_EQUAL or \
            self.op.kind == TokenType.GREATER_EQUAL
+
+  @property
+  def is_relational(self) -> bool:
+    return self.is_cmp_eq or self.is_cmp_ne or \
+           self.is_cmp_less or self.is_cmp_leq
 
   @property
   def is_add(self) -> bool: 
@@ -79,6 +86,11 @@ class BinaryExpr (Expr) :
   @property
   def is_div(self) -> bool: 
     return self.op.kind == TokenType.SLASH
+
+  @property
+  def is_arithmetic(self) -> bool:
+    return self.is_add or self.is_sub or \
+           self.is_mul or self.is_div
 
 
 class LiteralExpr (Expr) :

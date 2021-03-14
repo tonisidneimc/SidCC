@@ -1,6 +1,9 @@
 
+from copy import copy
+
 from .token import *
 from .token_type import *
+from .data_type import *
 from .expr import *
 from .stmt import *
 from .errors import SyntaxErr, error_collector
@@ -8,6 +11,15 @@ from .errors import SyntaxErr, error_collector
 class Object : # for Variable description
   def __init__(self, offset : int = 0) :
     self.offset = offset
+
+class OperandType : # to evaluate expression operands
+  def __init__(self, kind : DataType, base=None) :
+    self.kind = kind
+    self.base = base # for pointers
+
+  @property
+  def is_integer(self) -> bool:
+    return self.kind == DataType.TY_INT 
 
 class Parser : 
 
@@ -21,11 +33,8 @@ class Parser :
     cls._offset = 0
 
     try:
-      if cls._match(TokenType.LEFT_BRACE) :
-        cls._consume_current()
-        body = cls._compoundStmt()
-      else :
-        body = None
+      cls._expect(TokenType.LEFT_BRACE, err_msg = "expected '{'")
+      body = cls._compoundStmt()
     except SyntaxErr as err :
       error_collector.add(err)
       return None # ensure later that it won't be compiled
@@ -65,7 +74,9 @@ class Parser :
          compoundStmt -> "{" statement* "}"
     """
     statements = []
-    
+
+    # '{' was previously consumed    
+
     while not cls._match(TokenType.RIGHT_BRACE) :
       
       if cls._is_at_end() : break
@@ -255,9 +266,51 @@ class Parser :
     while cls._match(TokenType.PLUS, TokenType.MINUS) :
       operator = cls._consume_current()
       right = cls._multiplication()
-     
-      left = BinaryExpr(left, operator, right)
 
+      left.operand_type = cls._add_type(left)
+      right.operand_type = cls._add_type(right)
+
+      # num + num
+      if left.operand_type.is_integer and right.operand_type.is_integer:
+        left = BinaryExpr(left, operator, right)
+
+      else:
+        # parse pointer arithmetic      
+
+        if operator.kind == TokenType.PLUS:
+  
+          # ptr + ptr
+          if left.operand_type.base and right.operand_type.base:
+            raise SyntaxErr(operator, "invalid operands")
+
+          else:
+            if left.operand_type.is_integer and right.operand_type.base:
+              # convert 'num + ptr' to 'ptr + num'
+              left, right = right, left
+
+            # convert 'ptr + num' to 'ptr + (num * 8)'
+            _operator = copy(operator); _operator.kind = TokenType.STAR
+            right = BinaryExpr(right, _operator, LiteralExpr(8))
+            left = BinaryExpr(left, operator, right)
+      
+        else: # operator.kind == TokenType.MINUS
+          
+          # ptr - num
+          if left.operand_type.base and right.operand_type.is_integer:
+            _operator = copy(operator); _operator.kind = TokenType.STAR
+            right = BinaryExpr(right, _operator, LiteralExpr(8))
+            left = BinaryExpr(left, operator, right)
+
+          # ptr - ptr, how many elements are between the two  
+          elif left.operand_type.base and right.operand_type.base:
+            left = BinaryExpr(left, operator, right)
+            _operator = copy(operator); _operator.kind = TokenType.SLASH
+            left = BinaryExpr(left, _operator, LiteralExpr(8))
+            left.operand_type = OperandType(DataType.TY_INT)
+
+          else:
+            raise SyntaxErr(operator, "invalid operands")
+        
     return left
 
   @classmethod
@@ -386,5 +439,29 @@ class Parser :
       if cls._previous().kind in end_statement : return
       elif cls._peek().kind in begin_statement : return
       else : cls._current += 1
+
+  @classmethod
+  def _add_type(cls, node : Expr) -> OperandType:
+
+    if node.operand_type is not None:
+      return node.operand_type
+
+    elif node.is_literal or node.is_variable or (node.is_binary and node.is_relational):
+      return OperandType(DataType.TY_INT)
+
+    elif (node.is_unary and node.is_neg) or (node.is_binary and node.is_arithmetic) or node.is_assignment:
+      return cls._add_type(node.lhs)
+
+    elif (node.is_unary and node.is_addressing):
+      base = cls._add_type(node.lhs)
+      return OperandType(DataType.TY_PTR, base)
+
+    elif node.is_deref:
+      operand_type = cls._add_type(node.lhs)
+
+      if operand_type.kind == DataType.TY_PTR:
+        return operand_type.base
+      else:
+        return OperandType(DataType.TY_INT)   
 
 
