@@ -25,6 +25,10 @@ class Expr(object) :
   def is_assignment(self) -> bool:
     return isinstance(self, AssignExpr)
 
+  @property
+  def is_funcall(self) -> bool:
+    return isinstance(self, FunCallExpr)
+
 class UnaryExpr (Expr) :
   def __init__(self, lhs : Expr, operator : Token) :
     self.op = operator
@@ -106,4 +110,9 @@ class AssignExpr (Expr) :
   def __init__(self, expr : Expr, value : Expr) :
     self.lhs = expr
     self.value = value
+
+class FunCallExpr (Expr) :
+  def __init__(self, callee : str, args : list = None) :
+    self.callee = callee
+    self.args = args
 

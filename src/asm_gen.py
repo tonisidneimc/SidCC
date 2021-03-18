@@ -194,6 +194,11 @@ class Asm_Generator :
       print("\tmovq (%rax), %rax")
       return
 
+    elif node.is_funcall:
+      print("\tmovq $0, %rax")
+      print("\tcall %s" %(node.callee))
+      return
+
     elif node.is_assignment:
       cls._gen_addr(node.lhs)
       cls._push()      # pushq %rax

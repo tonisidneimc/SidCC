@@ -427,12 +427,21 @@ class Parser :
 
     elif cls._match(TokenType.IDENTIFIER) :
       
-      var_name = cls._consume_current().lexeme
+      obj_name = cls._consume_current().lexeme
 
-      if not var_name in cls._lvars:
-        raise SyntaxErr(cls._previous(), "'%s' undeclared" %(var_name))
+      # function call
+      if cls._match(TokenType.LEFT_PAREN) :
+        cls._consume_current()
+        node = FunCallExpr(obj_name)
+        cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
+        return node
+
+      # variable
+      else :
+        if not obj_name in cls._lvars:
+          raise SyntaxErr(cls._previous(), "'%s' undeclared" %(obj_name))
         
-      return VariableExpr(var_name, var_desc = cls._lvars[var_name])
+        return VariableExpr(obj_name, var_desc = cls._lvars[obj_name])
 
     elif cls._match(TokenType.LEFT_PAREN) :
       # grouping expression
@@ -503,7 +512,7 @@ class Parser :
     if node.operand_type is not None:
       return node.operand_type
 
-    elif node.is_literal or node.is_variable or (node.is_binary and node.is_relational):
+    elif node.is_literal or node.is_variable or (node.is_binary and node.is_relational) or node.is_funcall:
       return ty_int
 
     elif (node.is_unary and node.is_neg) or (node.is_binary and node.is_arithmetic) or node.is_assignment:

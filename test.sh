@@ -1,11 +1,18 @@
 #!/bin/bash
 
+# cat input until EOF keyword and use it as a pipe to gcc
+# gcc compile as a .c source file, but stops before linking
+cat <<EOF | gcc -xc -c -o tmp2.o -
+int ret2() { return 2; }
+int ret8() { return 8; }
+EOF
+
 function assert {
   expected=$1
   input=$2
   
   python3 main.py "$input" > tmp.S
-  gcc -o tmp tmp.S
+  gcc -o tmp tmp.S tmp2.o
   ./tmp
   actual=$?
 
@@ -91,5 +98,9 @@ assert 3 '{ int x=3, y=5; return *(&y-(-1));}'
 assert 7 '{ int x=3, y=5; *(&x-1)=7; return y; }'
 assert 7 '{ int x=3, y=5; *(&y+2-1)=7; return x; }'
 assert 5 '{ int x=3; return (&x+2)-&x+3; }'
+
+assert 2 '{ return ret2(); }'
+assert 7 '{ return 5 + ret2(); }'
+assert 10 '{ return ret2() + ret8(); }'
 
 echo OK
