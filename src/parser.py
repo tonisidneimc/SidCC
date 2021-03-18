@@ -9,17 +9,9 @@ from .stmt import *
 from .errors import SyntaxErr, error_collector
 
 class Object : # for Variable description
-  def __init__(self, offset : int = 0) :
+  def __init__(self, data_type : DataType, offset : int = 0) :
+    self.data_type = data_type 
     self.offset = offset
-
-class OperandType : # to evaluate expression operands
-  def __init__(self, kind : DataType, base=None) :
-    self.kind = kind
-    self.base = base # for pointers
-
-  @property
-  def is_integer(self) -> bool:
-    return self.kind == DataType.TY_INT 
 
 class Parser : 
 
@@ -40,6 +32,66 @@ class Parser :
       return None # ensure later that it won't be compiled
     else:
       return FunctionStmt(cls._lvars, body, stack_size = cls._offset)   
+
+  @classmethod
+  def _declspec(cls) -> DataType:
+    
+    cls._expect(TokenType.INT, err_msg = "expected specifier or declaration")
+    return ty_int
+
+  @classmethod
+  def _declarator(cls, basetype : DataType) -> DataType:
+
+    data_type = basetype    
+
+    while cls._match(TokenType.STAR) :
+      data_type = Pointer_to(data_type)
+      cls._consume_current()
+
+    if not cls._match(TokenType.IDENTIFIER):
+      raise SyntaxErr(cls._peek(), "expected a variable name")
+
+    return data_type
+
+  @classmethod
+  def _declaration(cls) -> Stmt:
+
+    basetype = cls._declspec()
+
+    declarations = []
+
+    while not cls._is_at_end():
+
+      if cls._match(TokenType.SEMICOLON) : break
+
+      data_type = cls._declarator(basetype)
+
+      var_name = cls._consume_current().lexeme
+
+      if var_name in cls._lvars:
+        raise SyntaxErr(cls._previous(), "'%s' redeclared" %(var_name))
+
+      # else
+      cls._offset += 8
+      var_desc = Object(data_type, -(cls._offset))
+      cls._lvars[var_name] = var_desc
+
+      if cls._match(TokenType.EQUAL) :
+        cls._consume_current() 
+
+        # var = assignment
+        left  = VariableExpr(var_name, var_desc)
+        right = cls._assignment()
+        decl = ExpressionStmt(AssignExpr(left, right))
+        declarations.append(decl)
+
+      if not cls._match(TokenType.COMMA) : break
+      
+      cls._consume_current()
+
+    cls._expect(TokenType.SEMICOLON, "expected ';'")
+
+    return CompoundStmt(declarations)
 
   @classmethod
   def _statement(cls) -> Stmt:
@@ -71,7 +123,7 @@ class Parser :
   def _compoundStmt(cls) -> Stmt:
     """
        matches the rule:
-         compoundStmt -> "{" statement* "}"
+         compoundStmt -> "{" (declaration | statement)* "}"
     """
     statements = []
 
@@ -82,7 +134,10 @@ class Parser :
       if cls._is_at_end() : break
 
       try:
-        stmt = cls._statement()
+        if cls._match(TokenType.INT) :
+          stmt = cls._declaration()
+        else : 
+          stmt = cls._statement()
       except SyntaxErr as err:
         error_collector.add(err)
         cls._syncronize(); continue
@@ -267,8 +322,11 @@ class Parser :
       operator = cls._consume_current()
       right = cls._multiplication()
 
-      left.operand_type = cls._add_type(left)
-      right.operand_type = cls._add_type(right)
+      try:
+        left.operand_type  = cls._add_type(left)
+        right.operand_type = cls._add_type(right)
+      except SyntaxErr as err:
+        raise
 
       # num + num
       if left.operand_type.is_integer and right.operand_type.is_integer:
@@ -280,11 +338,11 @@ class Parser :
         if operator.kind == TokenType.PLUS:
   
           # ptr + ptr
-          if left.operand_type.base and right.operand_type.base:
+          if left.operand_type.is_pointer and right.operand_type.is_pointer:
             raise SyntaxErr(operator, "invalid operands")
 
           else:
-            if left.operand_type.is_integer and right.operand_type.base:
+            if left.operand_type.is_integer and right.operand_type.is_pointer:
               # convert 'num + ptr' to 'ptr + num'
               left, right = right, left
 
@@ -296,17 +354,17 @@ class Parser :
         else: # operator.kind == TokenType.MINUS
           
           # ptr - num
-          if left.operand_type.base and right.operand_type.is_integer:
+          if left.operand_type.is_pointer and right.operand_type.is_integer:
             _operator = copy(operator); _operator.kind = TokenType.STAR
             right = BinaryExpr(right, _operator, LiteralExpr(8))
             left = BinaryExpr(left, operator, right)
 
           # ptr - ptr, how many elements are between the two  
-          elif left.operand_type.base and right.operand_type.base:
+          elif left.operand_type.is_pointer and right.operand_type.is_pointer:
             left = BinaryExpr(left, operator, right)
             _operator = copy(operator); _operator.kind = TokenType.SLASH
             left = BinaryExpr(left, _operator, LiteralExpr(8))
-            left.operand_type = OperandType(DataType.TY_INT)
+            left.operand_type = ty_int
 
           else:
             raise SyntaxErr(operator, "invalid operands")
@@ -371,10 +429,9 @@ class Parser :
       
       var_name = cls._consume_current().lexeme
 
-      if not var_name in cls._lvars :
-        cls._offset += 8
-        cls._lvars[var_name] = Object(-(cls._offset))
-
+      if not var_name in cls._lvars:
+        raise SyntaxErr(cls._previous(), "'%s' undeclared" %(var_name))
+        
       return VariableExpr(var_name, var_desc = cls._lvars[var_name])
 
     elif cls._match(TokenType.LEFT_PAREN) :
@@ -441,27 +498,27 @@ class Parser :
       else : cls._current += 1
 
   @classmethod
-  def _add_type(cls, node : Expr) -> OperandType:
+  def _add_type(cls, node : Expr) -> DataType:
 
     if node.operand_type is not None:
       return node.operand_type
 
     elif node.is_literal or node.is_variable or (node.is_binary and node.is_relational):
-      return OperandType(DataType.TY_INT)
+      return ty_int
 
     elif (node.is_unary and node.is_neg) or (node.is_binary and node.is_arithmetic) or node.is_assignment:
       return cls._add_type(node.lhs)
 
     elif (node.is_unary and node.is_addressing):
       base = cls._add_type(node.lhs)
-      return OperandType(DataType.TY_PTR, base)
+      return Pointer_to(base)
 
     elif node.is_deref:
       operand_type = cls._add_type(node.lhs)
 
-      if operand_type.kind == DataType.TY_PTR:
-        return operand_type.base
-      else:
-        return OperandType(DataType.TY_INT)   
+      if not operand_type.is_pointer:
+        raise SyntaxErr(node.operator, err_msg = "invalid pointer dereference")
 
+      return operand_type.base
+      
 

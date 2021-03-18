@@ -13,6 +13,7 @@ class Scanner(object) :
     "while"  : TokenType.WHILE,
     "for"    : TokenType.FOR,
     "return" : TokenType.RETURN,
+    "int"    : TokenType.INT,
   }
 
   # punctuators characters
@@ -22,6 +23,7 @@ class Scanner(object) :
     '{'  : (lambda : Scanner._make_token(TokenType.LEFT_BRACE)),
     '}'  : (lambda : Scanner._make_token(TokenType.RIGHT_BRACE)),
     ';'  : (lambda : Scanner._make_token(TokenType.SEMICOLON)),
+    ','  : (lambda : Scanner._make_token(TokenType.COMMA)),
     '-'  : (lambda : Scanner._make_token(TokenType.MINUS)),
     '+'  : (lambda : Scanner._make_token(TokenType.PLUS)),
     '*'  : (lambda : Scanner._make_token(TokenType.STAR)),
