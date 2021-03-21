@@ -7,6 +7,7 @@ class Asm_Generator :
   
   _depth = 0
   _label_count = 0
+  _argreg = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
 
   @classmethod
   def gen(cls, prog : FunctionStmt) -> None: 
@@ -195,6 +196,16 @@ class Asm_Generator :
       return
 
     elif node.is_funcall:
+      nargs = len(node.args)
+
+      for arg in node.args :
+        cls._gen_expr(arg) # gen expression to %rax
+        cls._push()        # pushq %rax
+
+      if nargs != 0 :
+        for reg in cls._argreg[nargs-1::-1] :
+          cls._pop(reg) # popq to arg register     
+
       print("\tmovq $0, %rax")
       print("\tcall %s" %(node.callee))
       return

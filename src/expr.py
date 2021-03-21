@@ -112,7 +112,7 @@ class AssignExpr (Expr) :
     self.value = value
 
 class FunCallExpr (Expr) :
-  def __init__(self, callee : str, args : list = None) :
+  def __init__(self, callee : str, args : list = []) :
     self.callee = callee
     self.args = args
 

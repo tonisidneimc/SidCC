@@ -412,12 +412,39 @@ class Parser :
     return cls._primary()
 
   @classmethod
+  def _funcall(cls, obj_name : str) -> Expr:
+    """
+       matches the rule:
+         funcall -> IDENTIFIER "(" ( assignment ("," assignment)*)? ")"
+    """
+    cls._consume_current() # consumes '('
+
+    arg_list = []
+
+    while not cls._match(TokenType.RIGHT_PAREN) :
+      try:
+        arg = cls._assignment()
+      except SyntaxErr:
+        raise
+      else:
+        arg_list.append(arg)
+
+      if not cls._match(TokenType.COMMA) : break 
+        
+      cls._consume_current() # consumes ','
+         
+    cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
+    
+    return FunCallExpr(obj_name, arg_list) 
+
+  @classmethod
   def _primary(cls) -> Expr:
     
     """
        matches to one of the rules:
          primary -> NUMBER
          primary -> IDENTIFIER
+         primary -> funcall
          primary -> "(" expression ")"
     """
 
@@ -431,10 +458,7 @@ class Parser :
 
       # function call
       if cls._match(TokenType.LEFT_PAREN) :
-        cls._consume_current()
-        node = FunCallExpr(obj_name)
-        cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
-        return node
+        return cls._funcall(obj_name)
 
       # variable
       else :

@@ -5,6 +5,9 @@
 cat <<EOF | gcc -xc -c -o tmp2.o -
 int ret2() { return 2; }
 int ret8() { return 8; }
+int add(int x, int y) { return x+y; }
+int sub(int x, int y) { return x-y; }
+int add6(int a, int b, int c, int d, int e, int f) { return a+b+c+d+e+f; }
 EOF
 
 function assert {
@@ -99,8 +102,13 @@ assert 7 '{ int x=3, y=5; *(&x-1)=7; return y; }'
 assert 7 '{ int x=3, y=5; *(&y+2-1)=7; return x; }'
 assert 5 '{ int x=3; return (&x+2)-&x+3; }'
 
-assert 2 '{ return ret2(); }'
-assert 7 '{ return 5 + ret2(); }'
-assert 10 '{ return ret2() + ret8(); }'
+assert   2 '{ return ret2(); }'
+assert   7 '{ return 5 + ret2(); }'
+assert  10 '{ return ret2() + ret8(); }'
+assert   8 '{ return add(3, 5); }'
+assert   2 '{ return sub(5, 3); }'
+assert  21 '{ return add6(1,2,3,4,5,6); }'
+assert  66 '{ return add6(1,2,add6(3,4,5,6,7,8),9,10,11); }'
+assert 136 '{ return add6(1,2,add6(3,add6(4,5,6,7,8,9),10,11,12,13),14,15,16); }'
 
 echo OK
