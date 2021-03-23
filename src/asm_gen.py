@@ -8,30 +8,35 @@ class Asm_Generator :
   _depth = 0
   _label_count = 0
   _argreg = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
+  _curr_funct = None
 
   @classmethod
-  def gen(cls, prog : FunctionStmt) -> None: 
+  def gen(cls, prog : list) -> None:
 
     print(".text")
-    print("\t.globl main")
-    print("main:")
-   
-    # Prologue
-    print("\tpushq %rbp")
-    print("\tmovq %rsp, %rbp")
+
+    for fn in prog :
+
+      print("\n\t.globl %s" %(fn.name))
+      print("%s:" %(fn.name))
+      
+      cls._curr_funct = fn
+
+      # Prologue
+      print("\tpushq %rbp")
+      print("\tmovq %rsp, %rbp")
     
-    if prog.stack_size != 0:
-      prog.stack_size = cls._align_to(prog.stack_size, 16)
-      print("\tsubq $%d, %%rsp" %(prog.stack_size))
+      if fn.stack_size != 0:
+        fn.stack_size = cls._align_to(fn.stack_size, 16)
+        print("\tsubq $%d, %%rsp" %(fn.stack_size))
 
-    cls._gen_stmt(prog.body)
-
-    assert(cls._depth == 0)   
-
-    print(".L.return:")
-    # Epilogue
-    print("\tleave") # movq %rbp, %rsp; popq %rbp
-    print("\tret")
+      cls._gen_stmt(fn.body)
+      assert(cls._depth == 0)
+   
+      print(".L.return.%s:" %(fn.name))
+      # Epilogue
+      print("\tleave") # movq %rbp, %rsp; popq %rbp
+      print("\tret")
 
   @classmethod
   def _request_label(cls) -> int:
@@ -107,7 +112,7 @@ class Asm_Generator :
     elif stmt.is_return_stmt:
       if stmt.ret_value is not None:
         cls._gen_expr(stmt.ret_value)
-      print("\tjmp .L.return")
+      print("\tjmp .L.return.%s" %(cls._curr_funct.name))
 
   @classmethod
   def _gen_addr(cls, node : Expr) -> None:
@@ -196,6 +201,7 @@ class Asm_Generator :
       return
 
     elif node.is_funcall:
+      
       nargs = len(node.args)
 
       for arg in node.args :

@@ -40,11 +40,13 @@ class CompoundStmt(Stmt) :
   def __init__(self, statements : list) :
     self.body = statements
 
-class FunctionStmt(Stmt) : # function declaration as statement for now 
-  def __init__(self, lvars : map, body : CompoundStmt, stack_size : int = 0) :
+class FunctionStmt(Stmt) : 
+  def __init__(self, name : str, lvars : map, body : CompoundStmt, ret_type, stack_size : int = 0) :
+    self.name = name
     self.body = body
     self.stack_size = stack_size
     self.lvars = lvars
+    self.ret_type = ret_type
 
 class IfStmt(Stmt) :
   def __init__(self, condition : Expr, then_branch : Stmt, else_branch : Stmt) :

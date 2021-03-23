@@ -16,42 +16,82 @@ class Object : # for Variable description
 class Parser : 
 
   @classmethod
-  def parse(cls, tokens : list) -> FunctionStmt :
+  def parse(cls, tokens : list) -> list:
 
     cls._tokens = tokens
     cls._current = 0
 
-    cls._lvars = dict()
-    cls._offset = 0
+    prog = []
 
-    try:
-      cls._expect(TokenType.LEFT_BRACE, err_msg = "expected '{'")
-      body = cls._compoundStmt()
-    except SyntaxErr as err :
-      error_collector.add(err)
-      return None # ensure later that it won't be compiled
-    else:
-      return FunctionStmt(cls._lvars, body, stack_size = cls._offset)   
+    while not cls._is_at_end() :
+      try:
+        fn = cls._function()
+      except SyntaxErr as err:
+        error_collector.add(err)
+        cls._syncronize(); continue
+      else:
+        prog.append(fn)
+
+    return prog
 
   @classmethod
   def _declspec(cls) -> DataType:
-    
+
     cls._expect(TokenType.INT, err_msg = "expected specifier or declaration")
     return ty_int
 
   @classmethod
   def _declarator(cls, basetype : DataType) -> DataType:
 
-    data_type = basetype    
+    data_type = basetype
 
     while cls._match(TokenType.STAR) :
       data_type = Pointer_to(data_type)
       cls._consume_current()
 
     if not cls._match(TokenType.IDENTIFIER):
-      raise SyntaxErr(cls._peek(), "expected a variable name")
-
+      raise SyntaxErr(cls._peek(), "expected a %s name" \
+            %("function" if cls._match(TokenType.LEFT_PAREN) else "variable"))
+     
     return data_type
+
+  @classmethod
+  def _function(cls) -> FunctionStmt:
+    
+    cls._lvars = dict() # map of local variables
+    cls._offset = 0     # offset of each local variable
+
+    try:
+      e_brace = 1
+      basetype = cls._declspec()
+      ret_type = cls._declarator(basetype)
+      ret_type = Function(ret_type)
+
+      fname = cls._consume_current().lexeme
+
+      cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '('")
+      cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
+      cls._expect(TokenType.LEFT_BRACE, err_msg = "expected '{'")
+
+      body = cls._compoundStmt()
+      e_brace = 0
+
+    except SyntaxErr as err:
+      # panicked at function definition, exit from function's block
+      error_collector.add(err)
+      cls._consume_current()
+ 
+      while not cls._is_at_end() :
+        if cls._match(TokenType.RIGHT_BRACE) :
+          if e_brace == 1 :
+            cls._current += 1; break;
+          e_brace -= 1
+          
+        elif cls._match(TokenType.LEFT_BRACE) : e_brace += 1
+
+        cls._current += 1
+    else: 
+      return FunctionStmt(fname, cls._lvars, body, ret_type, stack_size=cls._offset)
 
   @classmethod
   def _declaration(cls) -> Stmt:
@@ -70,15 +110,13 @@ class Parser :
 
       if var_name in cls._lvars:
         raise SyntaxErr(cls._previous(), "'%s' redeclared" %(var_name))
-
-      # else
-      cls._offset += 8
-      var_desc = Object(data_type, -(cls._offset))
-      cls._lvars[var_name] = var_desc
+      else:
+        cls._offset += 8
+        var_desc = Object(data_type, -(cls._offset))
+        cls._lvars[var_name] = var_desc
 
       if cls._match(TokenType.EQUAL) :
-        cls._consume_current() 
-
+        cls._consume_current()
         # var = assignment
         left  = VariableExpr(var_name, var_desc)
         right = cls._assignment()
@@ -86,8 +124,7 @@ class Parser :
         declarations.append(decl)
 
       if not cls._match(TokenType.COMMA) : break
-      
-      cls._consume_current()
+      cls._consume_current() # consumes ',' and continue
 
     cls._expect(TokenType.SEMICOLON, "expected ';'")
 
@@ -103,7 +140,7 @@ class Parser :
          statement -> forStmt
          statement -> returnStmt
     """
-    _statements = {
+    statements = {
       TokenType.IF         : cls._ifStmt,
       TokenType.FOR        : cls._forStmt,
       TokenType.WHILE      : cls._whileStmt,
@@ -113,9 +150,9 @@ class Parser :
 
     token_kind = cls._peek().kind
 
-    if token_kind in _statements:
+    if token_kind in statements:
       cls._consume_current()
-      return _statements[token_kind]()
+      return statements[token_kind]()
     else :
       return cls._exprStmt()
   
@@ -127,13 +164,13 @@ class Parser :
     """
     statements = []
 
-    # '{' was previously consumed    
+    # '{' was previously consumed
 
     while not cls._match(TokenType.RIGHT_BRACE) :
       
       if cls._is_at_end() : break
 
-      try:
+      try :
         if cls._match(TokenType.INT) :
           stmt = cls._declaration()
         else : 
@@ -147,7 +184,7 @@ class Parser :
         statements.append(stmt)
     
     # it will consume correspondents '}' until EOF
-    cls._expect(TokenType.RIGHT_BRACE, err_msg = "expected declaration or statement at end of input")
+    cls._expect(TokenType.RIGHT_BRACE, err_msg = "expected '}'")
 
     return CompoundStmt(statements)
 
@@ -157,12 +194,13 @@ class Parser :
        matches the rule:
          ifStmt -> "if" "(" expression ")" statement ("else" statement)?
     """
+    # 'if' was previously consumed
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'if'")
     condition = cls._expression()
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after if condition")
         
     then_branch = cls._statement()
-
+    
     else_branch = None
     if cls._match(TokenType.ELSE) :
       cls._consume_current()
@@ -173,9 +211,10 @@ class Parser :
   @classmethod 
   def _forStmt(cls) -> Stmt:
     """
-       matches the rule:  
+       matches the rule:
          forStmt -> "for" "(" exprStmt expression? ";" expression? ")" statement
     """
+    # 'for' was previously consumed
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'for'")
     initializer = cls._exprStmt()
 
@@ -195,13 +234,15 @@ class Parser :
        matches the rule:
          whileStmt -> "while" "(" expression ")" statement
     """
+    # 'while' was previously consumed
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'while'")
     condition = cls._expression()
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after condition")
 
     body = cls._statement()
 
-    return ForStmt(init = None, cond = condition, inc = None, body = body)
+    # init = None, increment = None
+    return ForStmt(None, condition, None, body)
 
   @classmethod
   def _returnStmt(cls) -> Stmt:    
@@ -209,6 +250,7 @@ class Parser :
        matches the rule:
          returnStmt -> "return" expression? ";"
     """
+    # 'return' was previously consumed
     value = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
 
     cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
@@ -229,7 +271,6 @@ class Parser :
 
   @classmethod
   def _expression(cls) -> Expr:
-    
     """
        matches the rule: 
          expression -> assignment
@@ -435,7 +476,7 @@ class Parser :
          
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
     
-    return FunCallExpr(obj_name, arg_list) 
+    return FunCallExpr(obj_name, arg_list)    
 
   @classmethod
   def _primary(cls) -> Expr:
@@ -488,8 +529,9 @@ class Parser :
     return self._tokens[self._current - 1]
 
   @classmethod 
-  def _is_at_end(cls) -> bool:   
-    return cls._peek().kind == TokenType.EOF
+  def _is_at_end(cls) -> bool:
+    if cls._current >= len(cls._tokens) : return True
+    else : return cls._peek().kind == TokenType.EOF
 
   @classmethod
   def _match(cls, *args : tuple) -> bool:
@@ -508,7 +550,9 @@ class Parser :
 
   @classmethod
   def _expect(cls, expected : TokenType, err_msg : str) -> Token:
-    if cls._match(expected):
+    if cls._is_at_end() :
+      raise SyntaxErr(cls._previous(), err_msg + "at end of input")
+    elif cls._peek().kind == expected:
       cls._current += 1
       return cls._previous()
     else:
@@ -516,16 +560,17 @@ class Parser :
     
   @classmethod
   def _syncronize(cls) -> None :
-  
+
     begin_statement = {
+      TokenType.LEFT_BRACE,
       TokenType.IF,
       TokenType.FOR, TokenType.WHILE,
+      TokenType.INT,
       TokenType.RETURN,
     }
     end_statement = {TokenType.SEMICOLON, TokenType.RIGHT_BRACE}
 
     while not cls._is_at_end() :
-
       if cls._previous().kind in end_statement : return
       elif cls._peek().kind in begin_statement : return
       else : cls._current += 1

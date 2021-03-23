@@ -17,5 +17,9 @@ class Pointer_to(DataType):
   def __init__(self, base : DataType) :
     self.base = base
 
+class Function(DataType):
+  def __init__(self, ret_type : DataType) :
+    self.ret_type = ret_type
+
 ty_int = Int()
 
