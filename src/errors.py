@@ -4,7 +4,7 @@ from .token import *
 
 bold_color = "\033[1m"
 error_color = "\x1B[31m"
-warning_color = "\x1B[33m"    
+warning_color = "\033[35m"
 reset_color = "\x1B[0m"
 
 class CompileError(Exception) :

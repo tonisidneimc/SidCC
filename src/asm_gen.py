@@ -17,7 +17,7 @@ class Asm_Generator :
 
     for fn in prog :
 
-      print("\n\t.globl %s" %(fn.name))
+      print("\t.globl %s" %(fn.name))
       print("%s:" %(fn.name))
       
       cls._curr_funct = fn
@@ -30,13 +30,18 @@ class Asm_Generator :
         fn.stack_size = cls._align_to(fn.stack_size, 16)
         print("\tsubq $%d, %%rsp" %(fn.stack_size))
 
+      # save passed-by-register arguments to the stack
+      for reg, var in zip(cls._argreg, fn.params) :
+        print("\tmovq %s, %d(%%rbp)" %(reg, var.offset))
+
+      # emit code
       cls._gen_stmt(fn.body)
       assert(cls._depth == 0)
    
       print(".L.return.%s:" %(fn.name))
       # Epilogue
       print("\tleave") # movq %rbp, %rsp; popq %rbp
-      print("\tret")
+      print("\tret\n")
 
   @classmethod
   def _request_label(cls) -> int:

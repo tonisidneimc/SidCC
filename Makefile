@@ -17,7 +17,7 @@ clean-build:
 	-@rm -rf __pycache__ 
 
 clean: clean-build
-	@rm -f *.o *~ tmp* 
+	@rm -f *.o *~ tmp* *.c *.txt
 
 check:
 	@$(PYTHON) --version

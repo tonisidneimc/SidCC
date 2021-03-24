@@ -21,7 +21,10 @@ class Parser :
     cls._tokens = tokens
     cls._current = 0
 
-    prog = []
+    cls._prog = [] # prog -> function*
+
+    # map fname -> index of function in prog
+    cls._env = dict()
 
     while not cls._is_at_end() :
       try:
@@ -30,9 +33,10 @@ class Parser :
         error_collector.add(err)
         cls._syncronize(); continue
       else:
-        prog.append(fn)
+        cls._env[fn.name] = len(cls._prog)
+        cls._prog.append(fn)
 
-    return prog
+    return cls._prog
 
   @classmethod
   def _declspec(cls) -> DataType:
@@ -50,10 +54,44 @@ class Parser :
       cls._consume_current()
 
     if not cls._match(TokenType.IDENTIFIER):
-      raise SyntaxErr(cls._peek(), "expected a %s name" \
-            %("function" if cls._match(TokenType.LEFT_PAREN) else "variable"))
+      raise SyntaxErr(cls._peek(), "expected a identifier")
      
     return data_type
+
+  @classmethod
+  def _new_lvar(cls, var_name : str, data_type : DataType) :
+    
+    cls._offset += 8
+    var_desc = Object(data_type, -(cls._offset))
+    cls._lvars[var_name] = var_desc
+    return var_desc
+
+  @classmethod
+  def _func_params(cls) -> list:
+    """
+       func_params -> param ("," param)*
+    """
+    params = []
+      
+    while not cls._is_at_end() :
+      try:
+        if cls._match(TokenType.RIGHT_PAREN) : break
+
+        basetype = cls._declspec()
+        data_type = cls._declarator(basetype)
+     
+        var_name = cls._consume_current().lexeme
+
+        param = cls._new_lvar(var_name, data_type)
+
+      except SyntaxErr as err: raise
+      else :
+        params.append(param)
+
+        if not cls._match(TokenType.COMMA) : break
+        cls._consume_current()
+
+    return params 
 
   @classmethod
   def _function(cls) -> FunctionStmt:
@@ -70,6 +108,9 @@ class Parser :
       fname = cls._consume_current().lexeme
 
       cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '('")
+      
+      params = cls._func_params() # func_params -> param ("," param)
+      
       cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
       cls._expect(TokenType.LEFT_BRACE, err_msg = "expected '{'")
 
@@ -78,7 +119,6 @@ class Parser :
 
     except SyntaxErr as err:
       # panicked at function definition, exit from function's block
-      error_collector.add(err)
       cls._consume_current()
  
       while not cls._is_at_end() :
@@ -90,8 +130,9 @@ class Parser :
         elif cls._match(TokenType.LEFT_BRACE) : e_brace += 1
 
         cls._current += 1
+      raise
     else: 
-      return FunctionStmt(fname, cls._lvars, body, ret_type, stack_size=cls._offset)
+      return FunctionStmt(fname, params, cls._lvars, body, ret_type, stack_size=cls._offset)
 
   @classmethod
   def _declaration(cls) -> Stmt:
@@ -111,10 +152,8 @@ class Parser :
       if var_name in cls._lvars:
         raise SyntaxErr(cls._previous(), "'%s' redeclared" %(var_name))
       else:
-        cls._offset += 8
-        var_desc = Object(data_type, -(cls._offset))
-        cls._lvars[var_name] = var_desc
-
+        var_desc = cls._new_lvar(var_name, data_type)
+        
       if cls._match(TokenType.EQUAL) :
         cls._consume_current()
         # var = assignment
@@ -298,6 +337,7 @@ class Parser :
       else:  
         value = cls._assignment()
         expr = AssignExpr(expr, value)
+        expr.operand_type = cls._add_type(expr)
 
     return expr
 
@@ -317,6 +357,7 @@ class Parser :
       right = cls._comparison()
 
       left = BinaryExpr(left, operator, right)
+      left.operand_type = cls._add_type(left)
 
     return left
   
@@ -346,6 +387,8 @@ class Parser :
       else:
         left = BinaryExpr(left, operator, right)
 
+      left.operand_type = cls._add_type(left)
+
     return left
 
   @classmethod
@@ -366,12 +409,12 @@ class Parser :
       try:
         left.operand_type  = cls._add_type(left)
         right.operand_type = cls._add_type(right)
-      except SyntaxErr as err:
-        raise
+      except SyntaxErr as err: raise
 
       # num + num
       if left.operand_type.is_integer and right.operand_type.is_integer:
         left = BinaryExpr(left, operator, right)
+        left.operand_type = cls._add_type(left)
 
       else:
         # parse pointer arithmetic      
@@ -391,6 +434,7 @@ class Parser :
             _operator = copy(operator); _operator.kind = TokenType.STAR
             right = BinaryExpr(right, _operator, LiteralExpr(8))
             left = BinaryExpr(left, operator, right)
+            left.operand_type = cls._add_type(left)
       
         else: # operator.kind == TokenType.MINUS
           
@@ -399,6 +443,7 @@ class Parser :
             _operator = copy(operator); _operator.kind = TokenType.STAR
             right = BinaryExpr(right, _operator, LiteralExpr(8))
             left = BinaryExpr(left, operator, right)
+            left.operand_type = cls._add_type(left)
 
           # ptr - ptr, how many elements are between the two  
           elif left.operand_type.is_pointer and right.operand_type.is_pointer:
@@ -428,6 +473,7 @@ class Parser :
       right = cls._unary()
      
       left = BinaryExpr(left, operator, right)
+      left.operand_type = cls._add_type(left)
 
     return left
 
@@ -446,7 +492,8 @@ class Parser :
 
     elif cls._match(TokenType.MINUS, TokenType.AMPERSAND, TokenType.STAR) :
       operator = cls._consume_current()
-      left = cls._unary()      
+      left = cls._unary()
+      left.operand_type = cls._add_type(left)
 
       return UnaryExpr(left, operator)
 
@@ -463,20 +510,52 @@ class Parser :
     arg_list = []
 
     while not cls._match(TokenType.RIGHT_PAREN) :
-      try:
+      try: # parse args
         arg = cls._assignment()
-      except SyntaxErr:
-        raise
+
+      except SyntaxErr: raise
       else:
-        arg_list.append(arg)
+        arg.operand_type = cls._add_type(arg)
+        arg_list.append(arg) # if no errors
 
       if not cls._match(TokenType.COMMA) : break 
         
-      cls._consume_current() # consumes ','
-         
+      cls._consume_current() # consumes ',' 
+
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
-    
-    return FunCallExpr(obj_name, arg_list)    
+
+    fname = obj_name.lexeme
+    try:
+      if not fname in cls._env :
+        # warning: function undeclared
+        raise SyntaxErr(obj_name, "implicit declaration of function '%s'" %(fname), True)
+
+    except SyntaxErr as err:
+      error_collector.add(err) # non-critical
+      return FunCallExpr(fname, arg_list)
+
+    fn = cls._prog[cls._env[fname]]
+  
+    i = 0; # iterate over the arguments list and check for type mismatches
+    while i < min(len(arg_list), fn.arity) :
+      try: # report all type mismatches
+        if arg_list[i].operand_type != fn.params[i].data_type :
+          raise SyntaxErr(obj_name, "expected '%s' but argument %d is of type '%s'"
+                        %(str(fn.params[i].data_type), i+1, str(arg_list[i].operand_type)))
+      except SyntaxErr as err :
+        error_collector.add(err) # non-critical ?
+
+      finally: i += 1
+
+    try:
+      if len(arg_list) < fn.arity :  # critical
+        raise SyntaxErr(obj_name, "too few arguments to function '%s'" %(fname))
+      elif len(arg_list) > fn.arity :  # critical
+        raise SyntaxErr(obj_name, "too many arguments to function '%s'" %(fname))
+
+    except SyntaxErr : raise
+
+    else : return FunCallExpr(fname, arg_list)
 
   @classmethod
   def _primary(cls) -> Expr:
@@ -495,7 +574,7 @@ class Parser :
 
     elif cls._match(TokenType.IDENTIFIER) :
       
-      obj_name = cls._consume_current().lexeme
+      obj_name = cls._consume_current()
 
       # function call
       if cls._match(TokenType.LEFT_PAREN) :
@@ -503,10 +582,14 @@ class Parser :
 
       # variable
       else :
-        if not obj_name in cls._lvars:
-          raise SyntaxErr(cls._previous(), "'%s' undeclared" %(obj_name))
+        var_name = obj_name.lexeme
+        if not var_name in cls._lvars:
+          raise SyntaxErr(cls._previous(), "'%s' undeclared" %(var_name))
         
-        return VariableExpr(obj_name, var_desc = cls._lvars[obj_name])
+        var_desc = cls._lvars[var_name]
+        left = VariableExpr(var_name, var_desc)
+        left.operand_type = var_desc.data_type
+        return left
 
     elif cls._match(TokenType.LEFT_PAREN) :
       # grouping expression
@@ -551,7 +634,7 @@ class Parser :
   @classmethod
   def _expect(cls, expected : TokenType, err_msg : str) -> Token:
     if cls._is_at_end() :
-      raise SyntaxErr(cls._previous(), err_msg + "at end of input")
+      raise SyntaxErr(cls._previous(), err_msg + " at end of input")
     elif cls._peek().kind == expected:
       cls._current += 1
       return cls._previous()
@@ -581,7 +664,7 @@ class Parser :
     if node.operand_type is not None:
       return node.operand_type
 
-    elif node.is_literal or node.is_variable or (node.is_binary and node.is_relational) or node.is_funcall:
+    elif node.is_literal or (node.is_binary and node.is_relational) or node.is_funcall:
       return ty_int
 
     elif (node.is_unary and node.is_neg) or (node.is_binary and node.is_arithmetic) or node.is_assignment:
@@ -595,7 +678,7 @@ class Parser :
       operand_type = cls._add_type(node.lhs)
 
       if not operand_type.is_pointer:
-        raise SyntaxErr(node.operator, err_msg = "invalid pointer dereference")
+        raise SyntaxErr(node.op, "invalid pointer dereference")
 
       return operand_type.base
       

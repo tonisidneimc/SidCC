@@ -41,8 +41,11 @@ class CompoundStmt(Stmt) :
     self.body = statements
 
 class FunctionStmt(Stmt) : 
-  def __init__(self, name : str, lvars : map, body : CompoundStmt, ret_type, stack_size : int = 0) :
+  def __init__(self, name : str, params : list, lvars : map, 
+               body : CompoundStmt, ret_type, stack_size : int = 0) :
     self.name = name
+    self.params = params
+    self.arity = len(self.params)
     self.body = body
     self.stack_size = stack_size
     self.lvars = lvars
