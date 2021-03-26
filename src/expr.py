@@ -107,12 +107,14 @@ class VariableExpr (Expr) :
     self.name = name
 
 class AssignExpr (Expr) :
-  def __init__(self, expr : Expr, value : Expr) :
+  def __init__(self, expr : Expr, equals : Token, value : Expr) :
     self.lhs = expr
+    self.equals = equals
     self.value = value
 
 class FunCallExpr (Expr) :
   def __init__(self, callee : str, args : list = []) :
     self.callee = callee
     self.args = args
+
 

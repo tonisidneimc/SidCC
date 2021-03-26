@@ -3,7 +3,9 @@ __all__ = ["TokenType"]
 class TokenType :
   COMMA, SEMICOLON, \
   \
-  LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, \
+  LEFT_PAREN, RIGHT_PAREN, \
+  LEFT_CURLY_BRACE, RIGHT_CURLY_BRACE, \
+  LEFT_SQUARE_BRACE, RIGHT_SQUARE_BRACE, \
   \
   PLUS, MINUS, SLASH, STAR, AMPERSAND, \
   \
@@ -14,6 +16,6 @@ class TokenType :
   \
   ELSE, FOR, IF, RETURN, WHILE, \
   \
-  EOF =  range(28)
+  EOF =  range(30)
 
 

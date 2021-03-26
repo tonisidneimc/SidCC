@@ -20,8 +20,10 @@ class Scanner(object) :
   _punct = {
     '('  : (lambda : Scanner._make_token(TokenType.LEFT_PAREN)),
     ')'  : (lambda : Scanner._make_token(TokenType.RIGHT_PAREN)),
-    '{'  : (lambda : Scanner._make_token(TokenType.LEFT_BRACE)),
-    '}'  : (lambda : Scanner._make_token(TokenType.RIGHT_BRACE)),
+    '{'  : (lambda : Scanner._make_token(TokenType.LEFT_CURLY_BRACE)),
+    '}'  : (lambda : Scanner._make_token(TokenType.RIGHT_CURLY_BRACE)),
+    '['  : (lambda : Scanner._make_token(TokenType.LEFT_SQUARE_BRACE)),
+    ']'  : (lambda : Scanner._make_token(TokenType.RIGHT_SQUARE_BRACE)),
     ';'  : (lambda : Scanner._make_token(TokenType.SEMICOLON)),
     ','  : (lambda : Scanner._make_token(TokenType.COMMA)),
     '-'  : (lambda : Scanner._make_token(TokenType.MINUS)),

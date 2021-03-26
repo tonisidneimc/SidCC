@@ -2,6 +2,7 @@
 from .stmt import *
 from .expr import *
 from .parser import Object
+from .data_type import *
 
 class Asm_Generator :
   
@@ -59,6 +60,24 @@ class Asm_Generator :
     
     print("\tpopq %s" %(dest_reg))
     cls._depth -= 1
+
+  @classmethod
+  def _load(cls, data_type : DataType) -> None:
+  
+    if data_type.is_array:
+      # cannot load an entire array into a register
+      # so the register will contain only a reference to the first element in the array
+      # this is the expected behaviour in C
+      # this reference is already in the register, so it returns
+      return
+    else:
+      print("\tmovq (%rax), %rax")
+
+  @classmethod
+  def _store(cls) -> None:
+    # store %rax into the address pointed by %rdi 
+    cls._pop("%rdi")
+    print("\tmovq %rax, (%rdi)")
 
   @staticmethod
   def _align_to(n : int, align : int) -> int: 
@@ -150,7 +169,7 @@ class Asm_Generator :
 
       elif node.is_deref:
         # dereference expression
-        print("\tmovq (%rax), %rax")
+        cls._load(node.operand_type)
         return    
 
   @classmethod
@@ -202,7 +221,7 @@ class Asm_Generator :
 
     elif node.is_variable:
       cls._gen_addr(node)
-      print("\tmovq (%rax), %rax")
+      cls._load(node.operand_type)
       return
 
     elif node.is_funcall:
@@ -225,8 +244,7 @@ class Asm_Generator :
       cls._gen_addr(node.lhs)
       cls._push()      # pushq %rax
       cls._gen_expr(node.value)
-      cls._pop("%rdi") # popq %rdi
-      print("\tmovq %rax, (%rdi)")
+      cls._store()
       return
 
     elif node.is_unary:
