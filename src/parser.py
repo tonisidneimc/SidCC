@@ -394,13 +394,72 @@ class Parser :
     return left
 
   @classmethod
+  def _new_add(cls, left : Expr, operator : Token, right : Expr) -> Expr:
+
+    left.operand_type  = cls._add_type(left)
+    right.operand_type = cls._add_type(right)
+
+    # num + num
+    if left.operand_type.is_integer and right.operand_type.is_integer:
+      left = BinaryExpr(left, operator, right)
+    
+    else:
+      # parse pointer arithmetic
+
+      # ptr + ptr, not defined behaviour
+      if left.operand_type.is_pointer and right.operand_type.is_pointer:
+        raise SyntaxErr(operator, "invalid operands")
+
+      if left.operand_type.is_integer and right.operand_type.is_pointer:
+        # convert 'num + ptr' to 'ptr + num'
+        left, right = right, left
+
+      # convert 'ptr + num' to 'ptr + (num * sizeof(basetype))'
+      mul_op = copy(operator); mul_op.kind = TokenType.STAR
+      right = BinaryExpr(right, mul_op, LiteralExpr(left.operand_type.base.size))
+      left = BinaryExpr(left, operator, right)
+
+    left.operand_type = cls._add_type(left)
+    return left
+
+  @classmethod
+  def _new_sub(cls, left : Expr, operator : Token, right : Expr) -> Expr:
+
+    left.operand_type  = cls._add_type(left)
+    right.operand_type = cls._add_type(right)
+
+    # num - num
+    if left.operand_type.is_integer and right.operand_type.is_integer:
+      left = BinaryExpr(left, operator, right)
+
+    else:
+      # ptr - num
+      if left.operand_type.is_pointer and right.operand_type.is_integer:
+        mul_op = copy(operator); mul_op.kind = TokenType.STAR
+        right = BinaryExpr(right, mul_op, LiteralExpr(left.operand_type.base.size))
+        left = BinaryExpr(left, operator, right)
+        
+      # ptr - ptr, how many elements are between the two  
+      elif left.operand_type.is_pointer and right.operand_type.is_pointer:
+        left = BinaryExpr(left, operator, right)
+        left.operand_type = ty_int
+        div_op = copy(operator); div_op.kind = TokenType.SLASH
+        left = BinaryExpr(left, div_op, LiteralExpr(left.operand_type.size))
+
+      else:
+        raise SyntaxErr(operator, "invalid operands")
+
+    left.operand_type = cls._add_type(left)
+    return left
+
+  @classmethod
   def _addition(cls) -> Expr:
     
     """
        matches to one of the rules: 
          addition -> multiplication ("+" multiplication)*
          addition -> multiplication ("-" multiplication)*
-    """    
+    """
 
     left = cls._multiplication()
     
@@ -409,54 +468,13 @@ class Parser :
       right = cls._multiplication()
 
       try:
-        left.operand_type  = cls._add_type(left)
-        right.operand_type = cls._add_type(right)
+        if operator.kind == TokenType.PLUS :
+          left = cls._new_add(left, operator, right)  
+        else:
+          left = cls._new_sub(left, operator, right)
+
       except SyntaxErr as err: raise
-
-      # num + num
-      if left.operand_type.is_integer and right.operand_type.is_integer:
-        left = BinaryExpr(left, operator, right)
-        left.operand_type = cls._add_type(left)
-
-      else:
-        # parse pointer arithmetic      
-
-        if operator.kind == TokenType.PLUS:
-  
-          # ptr + ptr
-          if left.operand_type.is_pointer and right.operand_type.is_pointer:
-            raise SyntaxErr(operator, "invalid operands")
-
-          else:
-            if left.operand_type.is_integer and right.operand_type.is_pointer:
-              # convert 'num + ptr' to 'ptr + num'
-              left, right = right, left
-
-            # convert 'ptr + num' to 'ptr + (num * 8)'
-            mul_op = copy(operator); mul_op.kind = TokenType.STAR
-            right = BinaryExpr(right, mul_op, LiteralExpr(left.operand_type.base.size))
-            left = BinaryExpr(left, operator, right)
-            left.operand_type = cls._add_type(left)
       
-        else: # operator.kind == TokenType.MINUS
-          
-          # ptr - num
-          if left.operand_type.is_pointer and right.operand_type.is_integer:
-            mul_op = copy(operator); mul_op.kind = TokenType.STAR
-            right = BinaryExpr(right, mul_op, LiteralExpr(left.operand_type.base.size))
-            left = BinaryExpr(left, operator, right)
-            left.operand_type = cls._add_type(left)
-
-          # ptr - ptr, how many elements are between the two  
-          elif left.operand_type.is_pointer and right.operand_type.is_pointer:
-            left = BinaryExpr(left, operator, right)
-            left.operand_type = ty_int
-            div_op = copy(operator); div_op.kind = TokenType.SLASH
-            left = BinaryExpr(left, div_op, LiteralExpr(left.operand_type.size))
-
-          else:
-            raise SyntaxErr(operator, "invalid operands")
-        
     return left
 
   @classmethod
@@ -485,7 +503,7 @@ class Parser :
     """
        matches to one of the rules:
          unary -> ("+" | "-" | "&" | "*")? unary
-         unary -> primary    
+         unary -> postfix
     """
 
     if cls._match(TokenType.PLUS) : # ignores it
@@ -499,7 +517,31 @@ class Parser :
       left.operand_type = cls._add_type(left)
       return left
 
-    return cls._primary()
+    return cls._postfix()
+
+  @classmethod
+  def _postfix(cls) -> Expr:
+    """
+       matches the rule:
+         postfix -> primary ("[" expression "]")?
+    """
+    left = cls._primary()
+
+    if cls._match(TokenType.LEFT_SQUARE_BRACE) :
+      operator = cls._consume_current() # consumes '['
+      operator.kind = TokenType.STAR # dereference operator
+      
+      idx = cls._expression()
+      
+      cls._expect(TokenType.RIGHT_SQUARE_BRACE, err_msg = "expected ']'")
+      
+      # x[y] is short for *(x+y) or *(&x + sizeof(basetype) * y)
+      add_op = copy(operator); add_op.kind = TokenType.PLUS
+      left = cls._new_add(left, add_op, idx)
+      left = UnaryExpr(left, operator)
+      left.operand_type = cls._add_type(left)
+
+    return left
 
   @classmethod
   def _funcall(cls, obj_name : str) -> Expr:

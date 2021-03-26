@@ -122,4 +122,8 @@ assert 3 'int main() { int x[3]; *x=3; *(x+1)=4; *(x+2)=5; return *x; }'
 assert 4 'int main() { int x[3]; *x=3; *(x+1)=4; *(x+2)=5; return *(x+1); }'
 assert 5 'int main() { int x[3]; *x=3; *(x+1)=4; *(x+2)=5; return *(x+2); }'
 
+assert  5 'int main() { int x[3]; x[1] = 5; x[1]; }'
+assert  9 'int main() { int x[3]; x[0]= x[1]= x[2]= 3; x[0]+x[1]+x[2]; }'
+assert 34 'int main() { int x[9], i = 2; x[0]= x[1]= 1; while(i<9){ x[i] = x[i-1] + x[i-2]; i = i + 1; }; x[8];}'
+
 echo OK
