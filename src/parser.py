@@ -45,6 +45,20 @@ class Parser :
     return ty_int
 
   @classmethod
+  def _type_suffix(cls, data_type : DataType) -> DataType:
+    
+    if cls._match(TokenType.LEFT_SQUARE_BRACE) :
+      cls._consume_current() # consumes '['
+      size = cls._expect(TokenType.NUM, err_msg = "expected a number").literal
+      cls._expect(TokenType.RIGHT_SQUARE_BRACE, err_msg = "expected ']'")
+      # it evaluates from right to left, 
+      # declare int x[2][3]; is array_of(array_of(3, int), 2)
+      data_type = cls._type_suffix(data_type)
+      return Array_of(data_type, size)
+
+    else : return data_type
+
+  @classmethod
   def _declarator(cls, basetype : DataType) -> tuple:
 
     data_type = basetype
@@ -56,15 +70,11 @@ class Parser :
     try:
       var_name = cls._expect(TokenType.IDENTIFIER, err_msg = "expected a identifier")
 
-      if cls._match(TokenType.LEFT_SQUARE_BRACE) :
-        cls._consume_current() # consumes '['
-        size = cls._expect(TokenType.NUM, err_msg = "expected a number").literal
-        cls._expect(TokenType.RIGHT_SQUARE_BRACE, err_msg = "expected ']'")
-        data_type = Array_of(data_type, size)
+      data_type = cls._type_suffix(data_type)
 
     except SyntaxErr : raise 
 
-    else : return data_type, var_name.lexeme
+    else : return data_type, var_name
 
   @classmethod
   def _new_lvar(cls, var_name : str, data_type : DataType) :
@@ -88,7 +98,7 @@ class Parser :
         basetype = cls._declspec()
         data_type, var_name = cls._declarator(basetype)
 
-        param = cls._new_lvar(var_name, data_type)
+        param = cls._new_lvar(var_name.lexeme, data_type)
 
       except SyntaxErr as err: raise
       else :
@@ -131,12 +141,14 @@ class Parser :
             cls._current += 1; break;
           e_brace -= 1
           
-        elif cls._match(TokenType.LEFT_CURLY_BRACE) : e_brace += 1
+        elif cls._match(TokenType.LEFT_CURLY_BRACE) : 
+          e_brace += 1
 
         cls._current += 1
       raise
     else: 
-      return FunctionStmt(fname, params, cls._lvars, body, ret_type, stack_size=cls._offset)
+      return FunctionStmt(fname.lexeme, params, cls._lvars, 
+                          body, ret_type, stack_size=cls._offset)
 
   @classmethod
   def _declaration(cls) -> Stmt:
@@ -151,15 +163,15 @@ class Parser :
 
       data_type, var_name = cls._declarator(basetype)
 
-      if var_name in cls._lvars:
-        raise SyntaxErr(cls._previous(), "'%s' redeclared" %(var_name))
+      if var_name.lexeme in cls._lvars:
+        raise SyntaxErr(var_name, "'%s' redeclared" %(var_name.lexeme))
       else:
-        var_desc = cls._new_lvar(var_name, data_type)
+        var_desc = cls._new_lvar(var_name.lexeme, data_type)
         
       if cls._match(TokenType.EQUAL) :
         equals = cls._consume_current()
         # var = assignment
-        left  = VariableExpr(var_name, var_desc)
+        left  = VariableExpr(var_name.lexeme, var_desc)
         right = cls._assignment()
         decl = ExpressionStmt(AssignExpr(left, equals, right))
         declarations.append(decl)
@@ -523,11 +535,11 @@ class Parser :
   def _postfix(cls) -> Expr:
     """
        matches the rule:
-         postfix -> primary ("[" expression "]")?
+         postfix -> primary ("[" expression "]")*
     """
     left = cls._primary()
 
-    if cls._match(TokenType.LEFT_SQUARE_BRACE) :
+    while cls._match(TokenType.LEFT_SQUARE_BRACE) :
       operator = cls._consume_current() # consumes '['
       operator.kind = TokenType.STAR # dereference operator
       
