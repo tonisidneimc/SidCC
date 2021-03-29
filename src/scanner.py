@@ -12,6 +12,7 @@ class Scanner(object) :
     "else"   : TokenType.ELSE,
     "while"  : TokenType.WHILE,
     "for"    : TokenType.FOR,
+    "sizeof" : TokenType.SIZEOF,
     "return" : TokenType.RETURN,
     "int"    : TokenType.INT,
   }

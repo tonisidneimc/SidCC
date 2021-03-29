@@ -621,6 +621,7 @@ class Parser :
          primary -> NUMBER
          primary -> IDENTIFIER
          primary -> funcall
+         primary -> "sizeof" unary
          primary -> "(" expression ")"
     """
 
@@ -646,6 +647,11 @@ class Parser :
         left = VariableExpr(var_name, var_desc)
         left.operand_type = var_desc.data_type
         return left
+
+    elif cls._match(TokenType.SIZEOF) :
+      cls._consume_current()
+      expr = cls._unary() # parse and add type to operand
+      return LiteralExpr(expr.operand_type.size)
 
     elif cls._match(TokenType.LEFT_PAREN) :
       # grouping expression
