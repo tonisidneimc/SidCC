@@ -4,53 +4,49 @@ from copy import copy
 from .token import *
 from .token_type import *
 from .data_type import *
+from .object_type import *
 from .expr import *
 from .stmt import *
 from .errors import SyntaxErr, error_collector
 
-class Object : # for Variable description
-  def __init__(self, data_type : DataType, offset : int = 0) :
-    self.data_type = data_type 
-    self.offset = offset
-
-class Parser : 
-
+class Parser :
+  
   @classmethod
   def parse(cls, tokens : list) -> list:
-
+    """
+       <program> -> declaration*
+    """
     cls._tokens = tokens
     cls._current = 0
 
-    cls._prog = [] # prog -> function*
+    cls._globals = []
 
-    # map fname -> index of function in prog
-    cls._env = dict()
-
-    while not cls._is_at_end() :
+    while not cls._is_at_end():
       try:
-        fn = cls._function()
+        cls._declaration()
       except SyntaxErr as err:
         error_collector.add(err)
-        cls._syncronize(); continue
-      else:
-        cls._env[fn.name] = len(cls._prog)
-        cls._prog.append(fn)
+        cls._syncronize()
 
-    return cls._prog
+    return cls._globals
 
   @classmethod
   def _declspec(cls) -> DataType:
-
+    """
+       <declspec> -> "int"
+    """
     cls._expect(TokenType.INT, err_msg = "expected specifier or declaration")
     return ty_int
 
   @classmethod
   def _type_suffix(cls, data_type : DataType) -> DataType:
-    
-    if cls._match(TokenType.LEFT_SQUARE_BRACE) :
+    """
+       <type_suffix> -> "[" NUMBER "]" <type_suffix> | ε
+    """
+    if cls._match(TokenType.LEFT_BRACKET) :
       cls._consume_current() # consumes '['
       size = cls._expect(TokenType.NUM, err_msg = "expected a number").literal
-      cls._expect(TokenType.RIGHT_SQUARE_BRACE, err_msg = "expected ']'")
+      cls._expect(TokenType.RIGHT_BRACKET, err_msg = "expected ']'")
       # it evaluates from right to left, 
       # declare int x[2][3]; is array_of(array_of(3, int), 2)
       data_type = cls._type_suffix(data_type)
@@ -60,7 +56,9 @@ class Parser :
 
   @classmethod
   def _declarator(cls, basetype : DataType) -> tuple:
-
+    """
+       <declarator> -> "*"* IDENTIFIER
+    """
     data_type = basetype
 
     while cls._match(TokenType.STAR) :
@@ -69,25 +67,30 @@ class Parser :
 
     try:
       var_name = cls._expect(TokenType.IDENTIFIER, err_msg = "expected a identifier")
-
-      data_type = cls._type_suffix(data_type)
-
-    except SyntaxErr : raise 
-
-    else : return data_type, var_name
+    
+    except SyntaxErr : raise
+    else : 
+      return data_type, var_name
 
   @classmethod
   def _new_lvar(cls, var_name : str, data_type : DataType) :
     
     cls._offset += data_type.size
-    var_desc = Object(data_type, -(cls._offset))
-    cls._lvars[var_name] = var_desc
+    var_desc = LVar(data_type, -(cls._offset))
+    cls._locals[var_name] = var_desc
+    return var_desc
+
+  @classmethod
+  def _new_gvar(cls, var_name : str, data_type : DataType) :
+  
+    var_desc = GVar(data_type, var_name)
+    cls._globals.append(var_desc)
     return var_desc
 
   @classmethod
   def _func_params(cls) -> list:
     """
-       func_params -> param ("," param)*
+       <func_params> -> <param> ("," <param>)*
     """
     params = []
       
@@ -95,9 +98,9 @@ class Parser :
       try:
         if cls._match(TokenType.RIGHT_PAREN) : break
 
+        # <param> -> <declspec> <declarator>
         basetype = cls._declspec()
         data_type, var_name = cls._declarator(basetype)
-
         param = cls._new_lvar(var_name.lexeme, data_type)
 
       except SyntaxErr as err: raise
@@ -105,54 +108,78 @@ class Parser :
         params.append(param)
 
         if not cls._match(TokenType.COMMA) : break
-        cls._consume_current()
+        cls._consume_current() # consumes ','
 
     return params 
 
   @classmethod
-  def _function(cls) -> FunctionStmt:
-    
-    cls._lvars = dict() # map of local variables
-    cls._offset = 0     # offset of each local variable
+  def _function(cls, basetype : DataType) -> Fn:
+    """
+       <function-definition> -> <declspec> <declarator> IDENTIFIER "(" <func-params> ")" "{" <block> "}"
+    """
+    cls._locals = dict() # map of local variables
+    cls._offset = 0      # offset of each local variable
 
     try:
       e_brace = 1
-      basetype = cls._declspec()
       ret_type, fname = cls._declarator(basetype)
-      ret_type = Function(ret_type)
+      ret_type = Function_type(ret_type)
 
       cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '('")
       
-      params = cls._func_params() # func_params -> param ("," param)
-      
+      params = cls._func_params()
+
       cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
-      cls._expect(TokenType.LEFT_CURLY_BRACE, err_msg = "expected '{'")
+      cls._expect(TokenType.LEFT_BRACE, err_msg = "expected '{'")
 
       body = cls._compoundStmt()
       e_brace = 0
 
     except SyntaxErr as err:
-      # panicked at function definition, exit from function's block
       cls._consume_current()
- 
-      while not cls._is_at_end() :
-        if cls._match(TokenType.RIGHT_CURLY_BRACE) :
-          if e_brace == 1 :
-            cls._current += 1; break;
-          e_brace -= 1
-          
-        elif cls._match(TokenType.LEFT_CURLY_BRACE) : 
-          e_brace += 1
+      # exit from function's block
+      cls._syncronize(e_brace); raise
+    else:
+      fn = Fn(fname.lexeme, ret_type, params, body, cls._locals, stack_size=cls._offset)
+      cls._globals.append(fn)
+  
+  @classmethod
+  def _global_variable(cls, basetype : DataType) :
+    # parse declaration of global variables     
 
-        cls._current += 1
-      raise
-    else: 
-      return FunctionStmt(fname.lexeme, params, cls._lvars, 
-                          body, ret_type, stack_size=cls._offset)
+    while not cls._match(TokenType.SEMICOLON) :
+      data_type, var_name = cls._declarator(basetype)     
+      data_type = cls._type_suffix(data_type)
+
+      cls._new_gvar(var_name.lexeme, data_type)
+      
+      if not cls._match(TokenType.COMMA) : break
+      cls._consume_current() # consumes ',' and continue
+
+    cls._expect(TokenType.SEMICOLON, "expected ';'")
 
   @classmethod
-  def _declaration(cls) -> Stmt:
+  def _declaration(cls) -> Object:
+    """
+       declaration -> (<function-definition> | <global-variable>)*
+    """
+    basetype = cls._declspec()
 
+    start = cls._current
+    cls._declarator(basetype) # lookahead to check if it is a function/var declaration
+    
+    if cls._match(TokenType.LEFT_PAREN) :
+      cls._current = start
+      return cls._function(basetype)
+    else :
+      cls._current = start
+      return cls._global_variable(basetype)
+
+  @classmethod
+  def _var_declaration(cls) -> Stmt:
+    """
+       <var-declaration> -> <declspec> (<declarator>("=" <expression>)?("," <declarator>("="<expression>)?)*)? ";"
+    """
     basetype = cls._declspec()
 
     declarations = []
@@ -162,16 +189,16 @@ class Parser :
       if cls._match(TokenType.SEMICOLON) : break
 
       data_type, var_name = cls._declarator(basetype)
+      data_type = cls._type_suffix(data_type)
 
-      if var_name.lexeme in cls._lvars:
+      if var_name.lexeme in cls._locals:
         raise SyntaxErr(var_name, "'%s' redeclared" %(var_name.lexeme))
       else:
         var_desc = cls._new_lvar(var_name.lexeme, data_type)
         
       if cls._match(TokenType.EQUAL) :
-        equals = cls._consume_current()
-        # var = assignment
-        left  = VariableExpr(var_name.lexeme, var_desc)
+        equals = cls._consume_current() # consumes '='
+        left  = VariableExpr(var_desc)
         right = cls._assignment()
         decl = ExpressionStmt(AssignExpr(left, equals, right))
         declarations.append(decl)
@@ -181,51 +208,43 @@ class Parser :
 
     cls._expect(TokenType.SEMICOLON, "expected ';'")
 
-    return CompoundStmt(declarations)
+    return Block(declarations)
 
   @classmethod
   def _statement(cls) -> Stmt:
     """
-       matches to one of the rules :
-         statement -> exprStmt
-         statement -> ifStmt
-         statement -> compoundStmt
-         statement -> forStmt
-         statement -> returnStmt
+       statement -> ifStmt | forStmt | whileStmt | block | returnStmt | exprStmt
     """
-    statements = {
-      TokenType.IF               : cls._ifStmt,
-      TokenType.FOR              : cls._forStmt,
-      TokenType.WHILE            : cls._whileStmt,
-      TokenType.LEFT_CURLY_BRACE : cls._compoundStmt,
-      TokenType.RETURN           : cls._returnStmt,
-    }
-
-    token_kind = cls._peek().kind
-
-    if token_kind in statements:
+    if cls._match(TokenType.IF) :
+      return cls._ifStmt()
+    elif cls._match(TokenType.FOR) :
+      return cls._forStmt()
+    elif cls._match(TokenType.WHILE) :
+      return cls._whileStmt()
+    elif cls._match(TokenType.LEFT_BRACE) :
       cls._consume_current()
-      return statements[token_kind]()
-    else :
+      return cls._compoundStmt()
+    elif cls._match(TokenType.RETURN) :
+      return cls._returnStmt()
+    else : 
       return cls._exprStmt()
   
   @classmethod
   def _compoundStmt(cls) -> Stmt:
     """
-       matches the rule:
-         compoundStmt -> "{" (declaration | statement)* "}"
+       <block> -> "{" (<var-declaration> | <statement>)* "}"
     """
     statements = []
 
     # '{' was previously consumed
 
-    while not cls._match(TokenType.RIGHT_CURLY_BRACE) :
+    while not cls._match(TokenType.RIGHT_BRACE) :
       
       if cls._is_at_end() : break
 
       try :
         if cls._match(TokenType.INT) :
-          stmt = cls._declaration()
+          stmt = cls._var_declaration()
         else : 
           stmt = cls._statement()
       except SyntaxErr as err:
@@ -237,17 +256,16 @@ class Parser :
         statements.append(stmt)
     
     # it will consume correspondents '}' until EOF
-    cls._expect(TokenType.RIGHT_CURLY_BRACE, err_msg = "expected '}'")
+    cls._expect(TokenType.RIGHT_BRACE, err_msg = "expected '}'")
 
-    return CompoundStmt(statements)
+    return Block(statements)
 
   @classmethod
   def _ifStmt(cls) -> Stmt:
     """
-       matches the rule:
-         ifStmt -> "if" "(" expression ")" statement ("else" statement)?
+       <ifStmt> -> "if" "(" <expression> ")" <statement> ("else" <statement>)?
     """
-    # 'if' was previously consumed
+    cls._consume_current()
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'if'")
     condition = cls._expression()
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after if condition")
@@ -264,10 +282,9 @@ class Parser :
   @classmethod 
   def _forStmt(cls) -> Stmt:
     """
-       matches the rule:
-         forStmt -> "for" "(" exprStmt expression? ";" expression? ")" statement
+       <forStmt> -> "for" "(" <exprStmt> <expression>? ";" <expression>? ")" <statement>
     """
-    # 'for' was previously consumed
+    cls._consume_current()
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'for'")
     initializer = cls._exprStmt()
 
@@ -284,10 +301,9 @@ class Parser :
   @classmethod
   def _whileStmt(cls) -> Stmt:
     """
-       matches the rule:
-         whileStmt -> "while" "(" expression ")" statement
+       <whileStmt> -> "while" "(" <expression> ")" <statement>
     """
-    # 'while' was previously consumed
+    cls._consume_current()
     cls._expect(TokenType.LEFT_PAREN, err_msg = "expected '(' after 'while'")
     condition = cls._expression()
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')' after condition")
@@ -300,10 +316,9 @@ class Parser :
   @classmethod
   def _returnStmt(cls) -> Stmt:    
     """
-       matches the rule:
-         returnStmt -> "return" expression? ";"
+       <returnStmt> -> "return" <expression>? ";"
     """
-    # 'return' was previously consumed
+    cls._consume_current()
     value = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
 
     cls._expect(TokenType.SEMICOLON, err_msg = "expected ';' after expression")
@@ -313,8 +328,7 @@ class Parser :
   @classmethod
   def _exprStmt(cls) -> Stmt:
     """
-       matches the rule :
-         exprStmt -> expression? ";"
+       <exprStmt> -> <expression>? ";"
     """
     expr = cls._expression() if not cls._match(TokenType.SEMICOLON) else None
 
@@ -325,17 +339,14 @@ class Parser :
   @classmethod
   def _expression(cls) -> Expr:
     """
-       matches the rule: 
-         expression -> assignment
+       <expression> -> <assignment>
     """
     return cls._assignment()
 
   @classmethod
   def _assignment(cls) -> Expr:
-    
     """ 
-       matches the rule: 
-         assignment -> equality ("=" assignment)?
+       <assignment> -> <equality> ("=" <assignment>)?
     """
     left = cls._equality()
 
@@ -343,12 +354,10 @@ class Parser :
 
       equals = cls._consume_current()
 
-      try:
+      if not (left.is_variable or (left.is_unary and left.is_deref)) :  
         # can only cascade variables and dereferences in an assignment
-        assert left.is_variable or (left.is_unary and left.is_deref)
-      except AssertionError:
         raise SyntaxErr(equals, "not an lvalue")
-      else:  
+      else: 
         right = cls._assignment()
         left = AssignExpr(left, equals, right)
         left.operand_type = cls._add_type(left)
@@ -357,13 +366,9 @@ class Parser :
 
   @classmethod
   def _equality(cls) -> Expr:
-    
     """
-       matches to one of the rules: 
-         equality -> comparison ("==" comparison)*
-         equality -> comparison ("!=" comparison)*
+       <equality> -> <comparison> ("==" <comparison> | "!=" <comparison>)*
     """
-
     left = cls._comparison()
 
     while cls._match(TokenType.EQUAL_EQUAL, TokenType.BANG_EQUAL) :
@@ -377,15 +382,9 @@ class Parser :
   
   @classmethod
   def _comparison(cls) -> Expr:
-
     """
-       matches to one of the rules: 
-         comparison -> addition ( "<" addition)*
-         comparison -> addition ("<=" addition)*
-         comparison -> addition ( ">" addition)*
-         comparison -> addition (">=" addition)*
-    """    
-
+       <comparison> -> <addition> ("<" <addition> | "<=" <addition> | ">" <addition> | ">=" <addition>)*
+    """
     left = cls._addition()
 
     while cls._match(TokenType.LESS, TokenType.LESS_EQUAL, 
@@ -466,13 +465,9 @@ class Parser :
 
   @classmethod
   def _addition(cls) -> Expr:
-    
     """
-       matches to one of the rules: 
-         addition -> multiplication ("+" multiplication)*
-         addition -> multiplication ("-" multiplication)*
+       <addition> -> <multiplication> ("+" <multiplication> | "-" <multiplication>)*
     """
-
     left = cls._multiplication()
     
     while cls._match(TokenType.PLUS, TokenType.MINUS) :
@@ -491,13 +486,9 @@ class Parser :
 
   @classmethod
   def _multiplication(cls) -> Expr:
-    
     """
-       matches to one of the rules: 
-         multiplication -> unary ("*" unary)*
-         multiplication -> unary ("/" unary)*
+       <multiplication> -> <unary> ("*" <unary> | "/" <unary>)*
     """
-
     left = cls._unary()
         
     while cls._match(TokenType.SLASH, TokenType.STAR) :
@@ -511,13 +502,9 @@ class Parser :
 
   @classmethod
   def _unary(cls) -> Expr :
-    
     """
-       matches to one of the rules:
-         unary -> ("+" | "-" | "&" | "*")? unary
-         unary -> postfix
+       <unary> -> ("+" | "-" | "&" | "*") <unary> | <postfix>
     """
-
     if cls._match(TokenType.PLUS) : # ignores it
       cls._consume_current()
       return cls._unary()
@@ -534,18 +521,17 @@ class Parser :
   @classmethod
   def _postfix(cls) -> Expr:
     """
-       matches the rule:
-         postfix -> primary ("[" expression "]")*
+       <postfix> -> <primary> ("[" <expression> "]")*
     """
     left = cls._primary()
 
-    while cls._match(TokenType.LEFT_SQUARE_BRACE) :
+    while cls._match(TokenType.LEFT_BRACKET) :
       operator = cls._consume_current() # consumes '['
       operator.kind = TokenType.STAR # dereference operator
       
       idx = cls._expression()
       
-      cls._expect(TokenType.RIGHT_SQUARE_BRACE, err_msg = "expected ']'")
+      cls._expect(TokenType.RIGHT_BRACKET, err_msg = "expected ']'")
       
       # x[y] is short for *(x+y) or *(&x + sizeof(basetype) * y)
       add_op = copy(operator); add_op.kind = TokenType.PLUS
@@ -556,10 +542,19 @@ class Parser :
     return left
 
   @classmethod
-  def _funcall(cls, obj_name : str) -> Expr:
+  def _resolve_function(cls, fname : Token) -> Fn:
+    
+    for fn in cls._globals :
+      if not fn.is_function : continue
+      if fn.name == fname.lexeme : return fn  
+
+    # warning: function undeclared
+    raise SyntaxErr(fname, "implicit declaration of function '%s'" %(fname.lexeme), True)
+
+  @classmethod
+  def _funcall(cls, fname : Token) -> Expr:
     """
-       matches the rule:
-         funcall -> IDENTIFIER "(" ( assignment ("," assignment)*)? ")"
+       <funcall> -> IDENTIFIER "(" ( <assignment> ("," <assignment>)*)? ")"
     """
     cls._consume_current() # consumes '('
 
@@ -580,51 +575,52 @@ class Parser :
 
     cls._expect(TokenType.RIGHT_PAREN, err_msg = "expected ')'")
 
-    fname = obj_name.lexeme
     try:
-      if not fname in cls._env :
-        # warning: function undeclared
-        raise SyntaxErr(obj_name, "implicit declaration of function '%s'" %(fname), True)
-
+      fn = cls._resolve_function(fname)
     except SyntaxErr as err:
       error_collector.add(err) # non-critical
-      return FunCallExpr(fname, arg_list)
+      # if function not defined, don't try to evaluate arg_list
+      return FunCallExpr(fname.lexeme, arg_list)
+    else:  
+      i = 0 # iterate over the arguments list and check for type mismatches
+      while i < min(len(arg_list), fn.arity) :
+        try: # report all type mismatches
+          if arg_list[i].operand_type != fn.params[i].data_type :
+            raise SyntaxErr(fname, "expected '%s' but argument %d is of type '%s'"
+                          %(str(fn.params[i].data_type), i+1, str(arg_list[i].operand_type)))
+        except SyntaxErr as err :
+          error_collector.add(err) # non-critical ?
+        finally: i += 1
 
-    fn = cls._prog[cls._env[fname]]
-  
-    i = 0; # iterate over the arguments list and check for type mismatches
-    while i < min(len(arg_list), fn.arity) :
-      try: # report all type mismatches
-        if arg_list[i].operand_type != fn.params[i].data_type :
-          raise SyntaxErr(obj_name, "expected '%s' but argument %d is of type '%s'"
-                        %(str(fn.params[i].data_type), i+1, str(arg_list[i].operand_type)))
-      except SyntaxErr as err :
-        error_collector.add(err) # non-critical ?
+      try:
+        if len(arg_list) < fn.arity :  # critical
+          raise SyntaxErr(fname, "too few arguments to function '%s'" %(fname.lexeme))
+        elif len(arg_list) > fn.arity :  # critical
+          raise SyntaxErr(fname, "too many arguments to function '%s'" %(fname.lexeme))
 
-      finally: i += 1
+      except SyntaxErr : raise
 
-    try:
-      if len(arg_list) < fn.arity :  # critical
-        raise SyntaxErr(obj_name, "too few arguments to function '%s'" %(fname))
-      elif len(arg_list) > fn.arity :  # critical
-        raise SyntaxErr(obj_name, "too many arguments to function '%s'" %(fname))
+      else : return FunCallExpr(fname.lexeme, arg_list)
 
-    except SyntaxErr : raise
+  @classmethod
+  def _find_var(cls, obj_name : Token) :
+    
+    var_name = obj_name.lexeme
 
-    else : return FunCallExpr(fname, arg_list)
+    if var_name in cls._locals : # try to find as a local variable
+      return cls._locals[var_name]
+    else:
+      for obj in cls._globals : # try to find as a global variable
+        if not obj.is_function and obj.name == var_name : 
+          return obj
+      
+      raise SyntaxErr(obj_name, "%s undeclared" %(var_name)) 
 
   @classmethod
   def _primary(cls) -> Expr:
-    
     """
-       matches to one of the rules:
-         primary -> NUMBER
-         primary -> IDENTIFIER
-         primary -> funcall
-         primary -> "sizeof" unary
-         primary -> "(" expression ")"
+       <primary> -> NUMBER | IDENTIFIER | <funcall> | "sizeof" <unary> | "(" <expression> ")"
     """
-
     if cls._match(TokenType.NUM) :
       curr_token = cls._consume_current()
       return LiteralExpr(curr_token.literal)
@@ -633,18 +629,13 @@ class Parser :
 
       obj_name = cls._consume_current()
 
-      # function call -> IDENTIFIER "(" args ")"
       if cls._match(TokenType.LEFT_PAREN) :
         return cls._funcall(obj_name)
 
-      # variable -> IDENTIFIER
       else :
-        var_name = obj_name.lexeme
-        if not var_name in cls._lvars:
-          raise SyntaxErr(cls._previous(), "'%s' undeclared" %(var_name))
-        
-        var_desc = cls._lvars[var_name]
-        left = VariableExpr(var_name, var_desc)
+        # variable
+        var_desc = cls._find_var(obj_name)
+        left = VariableExpr(var_desc)
         left.operand_type = var_desc.data_type
         return left
 
@@ -695,30 +686,46 @@ class Parser :
 
   @classmethod
   def _expect(cls, expected : TokenType, err_msg : str) -> Token:
+
     if cls._is_at_end() :
       raise SyntaxErr(cls._previous(), err_msg + " at end of input")
     elif cls._peek().kind == expected:
-      cls._current += 1
-      return cls._previous()
+      return cls._consume_current()
     else:
       raise SyntaxErr(cls._peek(), err_msg)
     
   @classmethod
-  def _syncronize(cls) -> None :
+  def _syncronize(cls, e_brace : int = 0) -> None :
+    # enter in panic mode
+    # discard tokens until a valid statement or expression is found
 
-    begin_statement = {
-      TokenType.LEFT_CURLY_BRACE,
-      TokenType.IF,
-      TokenType.FOR, TokenType.WHILE,
-      TokenType.INT,
-      TokenType.RETURN,
-    }
-    end_statement = {TokenType.SEMICOLON, TokenType.RIGHT_CURLY_BRACE}
+    if e_brace : # panicked at function definition
+      
+      while not cls._is_at_end() :
+        tk = cls._consume_current()
 
-    while not cls._is_at_end() :
-      if cls._previous().kind in end_statement : return
-      elif cls._peek().kind in begin_statement : return
-      else : cls._current += 1
+        if tk.kind == TokenType.RIGHT_BRACE :
+          if e_brace == 1 : break
+          else : e_brace -= 1
+
+        elif tk.kind == TokenType.LEFT_BRACE :
+          e_brace += 1
+
+    else : # panicked inside some function
+
+      while not cls._is_at_end() :
+        if cls._previous().kind in {
+          TokenType.SEMICOLON, 
+          TokenType.RIGHT_BRACE
+        } : return # end of a statement
+
+        elif cls._peek().kind in {
+          TokenType.IF, TokenType.INT,
+          TokenType.FOR, TokenType.LEFT_BRACE,
+          TokenType.RETURN, TokenType.WHILE
+        } : return # beginning of a statement
+        
+        else : cls._current += 1
 
   @classmethod
   def _add_type(cls, node : Expr) -> DataType:

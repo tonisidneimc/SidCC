@@ -1,5 +1,6 @@
 from .token import *
 from .token_type import *
+from .object_type import Var
 
 class Expr(object) :
   
@@ -102,9 +103,8 @@ class LiteralExpr (Expr) :
     self.value = value
 
 class VariableExpr (Expr) :
-  def __init__(self, name : str, var_desc : object) :
+  def __init__(self, var_desc : Var) :
     self.var_desc = var_desc
-    self.name = name
 
 class AssignExpr (Expr) :
   def __init__(self, expr : Expr, equals : Token, value : Expr) :

@@ -45,7 +45,7 @@ class Array_of (Pointer_to) :
     self.length = size
     self.size = base.size * self.length
 
-class Function (DataType):
+class Function_type (DataType):
   def __init__(self, ret_type : DataType) :
     self.ret_type = ret_type
 

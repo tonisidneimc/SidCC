@@ -9,37 +9,57 @@ class Asm_Generator :
   _depth = 0
   _label_count = 0
   _argreg = ["%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"]
-  _curr_funct = None
+  _current_fn = None
 
   @classmethod
   def gen(cls, prog : list) -> None:
+    
+    cls._emit_data(prog)
+    cls._emit_text(prog)
+    
+  @classmethod
+  def _emit_data(cls, prog : list) :
 
+    print(".data")
+   
+    for obj in prog :
+      if obj.is_function : continue
+  
+      print("\t.globl %s" %(obj.name))
+      print("%s:" %(obj.name))
+      print("\t.zero %d\n" %(obj.data_type.size))
+
+  @classmethod
+  def _emit_text(cls, prog : list) :
+    
     print(".text")
 
-    for fn in prog :
-
-      print("\t.globl %s" %(fn.name))
-      print("%s:" %(fn.name))
+    for obj in prog :
+  
+      if not obj.is_function : continue
+    
+      print("\t.globl %s" %(obj.name))
+      print("%s:" %(obj.name))
       
-      cls._curr_funct = fn
+      cls._current_fn = obj
 
       # Prologue
       print("\tpushq %rbp")
       print("\tmovq %rsp, %rbp")
     
-      if fn.stack_size != 0:
-        fn.stack_size = cls._align_to(fn.stack_size, 16)
-        print("\tsubq $%d, %%rsp" %(fn.stack_size))
+      if obj.stack_size != 0:
+        obj.stack_size = cls._align_to(obj.stack_size, 16)
+        print("\tsubq $%d, %%rsp" %(obj.stack_size))
 
       # save passed-by-register arguments to the stack
-      for reg, var in zip(cls._argreg, fn.params) :
+      for reg, var in zip(cls._argreg, obj.params) :
         print("\tmovq %s, %d(%%rbp)" %(reg, var.offset))
 
       # emit code
-      cls._gen_stmt(fn.body)
+      cls._gen_stmt(obj.body)
       assert(cls._depth == 0)
    
-      print(".L.return.%s:" %(fn.name))
+      print(".L.return.%s:" %(obj.name))
       # Epilogue
       print("\tleave") # movq %rbp, %rsp; popq %rbp
       print("\tret\n")
@@ -67,7 +87,7 @@ class Asm_Generator :
     if data_type.is_array:
       # cannot load an entire array into a register
       # so the register will contain only a reference to the first element in the array
-      # this is the expected behaviour in C
+      # this is the expected behavior in C
       # this reference is already in the register, so it returns
       return
     else:
@@ -136,13 +156,17 @@ class Asm_Generator :
     elif stmt.is_return_stmt:
       if stmt.ret_value is not None:
         cls._gen_expr(stmt.ret_value)
-      print("\tjmp .L.return.%s" %(cls._curr_funct.name))
+      print("\tjmp .L.return.%s" %(cls._current_fn.name))
 
   @classmethod
   def _gen_addr(cls, node : Expr) -> None:
     
     if node.is_variable:
-      print("\tleaq %d(%%rbp), %%rax" %(node.var_desc.offset))
+      if node.var_desc.is_local :
+        print("\tleaq %d(%%rbp), %%rax" %(node.var_desc.offset))
+      else:
+        print("\tleaq %s(%%rip), %%rax" %(node.var_desc.name))
+        #print("\tmovq $%s, %%rax" %(node.var_desc.name))
       return
     
     elif node.is_unary and node.is_deref:
@@ -153,7 +177,7 @@ class Asm_Generator :
   @classmethod
   def _gen_expr_unary(cls, node : Expr) -> None:  
 
-    assert(node.is_unary) # security check only  
+    assert(node.is_unary)  
 
     if node.is_addressing :
       # address_of expression 
@@ -175,7 +199,7 @@ class Asm_Generator :
   @classmethod
   def _gen_expr_binary(cls, node : Expr) -> None:
 
-    assert(node.is_binary) # security check only
+    assert(node.is_binary)
 
     cls._gen_expr(node.rhs)
     cls._push()      # pushq %rax
@@ -233,6 +257,7 @@ class Asm_Generator :
         cls._push()        # pushq %rax
 
       if nargs != 0 :
+        # iterate over the arg_reg list backwards
         for reg in cls._argreg[nargs-1::-1] :
           cls._pop(reg) # popq to arg register     
 
